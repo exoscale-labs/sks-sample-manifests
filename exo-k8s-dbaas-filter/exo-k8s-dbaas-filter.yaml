@@ -1,0 +1,108 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  # "namespace" omitted since ClusterRoles are not namespaced
+  name: node-reader
+rules:
+- apiGroups: [""]
+
+  resources: ["nodes"]
+  verbs: ["get", "watch", "list"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: k8s-dbaas-filter-binding
+subjects:
+- kind: ServiceAccount
+  name: k8s-dbaas-filter-role
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: node-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-dbaas-filter-role
+  namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: exo-k8s-dbaas-filter
+  name: exo-k8s-dbaas-filter
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: exo-k8s-dbaas-filter
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: exo-k8s-dbaas-filter
+    spec:
+      serviceAccountName: k8s-dbaas-filter-role
+      containers:
+      - image: darnst/exo-kubectl
+        name: exo-kubectl
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: EXOSCALE_API_KEY
+            valueFrom:
+              secretKeyRef:
+                key: api-key
+                name: exoscale-api-credentials
+          - name: EXOSCALE_API_SECRET
+            valueFrom:
+              secretKeyRef:
+                key: api-secret
+                name: exoscale-api-credentials
+        command:
+            - sh
+            - "-c"
+            - |
+              /bin/bash <<'EOF'
+
+              FILE1="/tmp/ips1"
+              FILE2="/tmp/ips2"
+
+              echo "" > $FILE1
+              echo "" > $FILE2
+
+              while true
+              do
+                # get a sorted list of all ips in the cluster to ips1
+                kubectl get nodes -o json | jq '[.items[] | .status .addresses[] | select(.type=="ExternalIP")] | sort_by(.address) | .[].address' > $FILE1
+
+
+                cmp -s $FILE1 $FILE2
+                if [ "$?" == "1" ]
+                then
+                  echo "New IPs detected, updating database"
+                  # Ips differ
+                  # Remove newlines, ", and trim
+                  IPLISTFOREXO=`cat $FILE1 | sed 'H;${x;s/\n/,/g;s/^,//;p;};d' | sed 's/"//g' | xargs`
+                  echo "Using IPs: $IPLISTFOREXO"
+
+                  # EDIT HERE
+                  # the command for updating the IPs of the database
+                  # Replace the zone and the name of the database
+                  # -----------------------------------------------------
+                  exo dbaas update testdabatase --pg-ip-filter $IPLISTFOREXO -z de-fra-1
+                  # -----------------------------------------------------
+                  # =====================================================
+                fi
+
+                cat $FILE1 > $FILE2
+                sleep 10
+              done
+
+              while true; do sleep 60; done
+
+              EOF
