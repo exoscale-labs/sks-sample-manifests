@@ -69,15 +69,29 @@ spec:
             - |
               /bin/bash <<'EOF'
 
-              FILE1="/tmp/ips1"
-              FILE2="/tmp/ips2"
+              if [[ -z "${EXOSCALE_API_KEY}" ]]; then
+                echo "EXOSCALE_API_KEY secret not set"
+                exit 1
+              fi
+              if [[ -z "${EXOSCALE_API_SECRET}" ]]; then
+                echo "EXOSCALE_API_SECRET secret not set"
+                exit 1
+              fi
+
+              # Current IPs
+              FILE1=$(mktemp /tmp/dbaas-filter.XXXXXX)
+              # IPs of last run
+              FILE2=$(mktemp /tmp/dbaas-filter.XXXXXX)
+
+              echo "APIKEY"
+              echo $EXOSCALE_API_KEY
 
               echo "" > $FILE1
               echo "" > $FILE2
 
               while true
               do
-                # get a sorted list of all ips in the cluster to ips1
+                # get a sorted list of all ips in the cluster to FILE1
                 kubectl get nodes -o json | jq '[.items[] | .status .addresses[] | select(.type=="ExternalIP")] | sort_by(.address) | .[].address' > $FILE1
 
 
@@ -88,13 +102,24 @@ spec:
                   # Ips differ
                   # Remove newlines, ", and trim
                   IPLISTFOREXO=`cat $FILE1 | sed 'H;${x;s/\n/,/g;s/^,//;p;};d' | sed 's/"//g' | xargs`
+
+                  # You can also add here additional static IPS
+                  # Make sure to prefix the list with a comma
+                  # -----------------------------------------------------
+                  # IPLISTFOREXO+=",123.111.33.88,66.33.45.66"
+                  # -----------------------------------------------------
+
                   echo "Using IPs: $IPLISTFOREXO"
 
+                  # =====================================================
                   # EDIT HERE
                   # the command for updating the IPs of the database
-                  # Replace the zone and the name of the database
+                  # Replace the ZONE (de-fra-1) and the NAME (testdatabase1...) of the database
                   # -----------------------------------------------------
-                  exo dbaas update testdabatase --pg-ip-filter $IPLISTFOREXO -z de-fra-1
+                  exo dbaas update --pg-ip-filter "$IPLISTFOREXO" testdabatase1 -z de-fra-1
+                  # exo dbaas update --mysql-ip-filter $IPLISTFOREXO testdabatase1 -z de-fra-1
+                  # exo dbaas update --kafka-ip-filter $IPLISTFOREXO testdabatase1 -z de-fra-1
+                  # exo dbaas update --redis-ip-filter $IPLISTFOREXO testdabatase1 -z de-fra-1
                   # -----------------------------------------------------
                   # =====================================================
                 fi
@@ -102,7 +127,5 @@ spec:
                 cat $FILE1 > $FILE2
                 sleep 10
               done
-
-              while true; do sleep 60; done
 
               EOF
