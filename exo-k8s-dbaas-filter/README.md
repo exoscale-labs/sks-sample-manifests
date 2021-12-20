@@ -1,7 +1,7 @@
 # Update DBaaS ip_filter automatically when using SKS
 
-This folder contains a deployment which checks every 10 secounds wether the IPs of the nodes in the SKS cluster differs.
-If yes, it will send an command with the current (updated) IPs to a DbaaS service.
+This folder contains a deployment which checks every 10 secounds wether the IPs of the nodes in the SKS cluster differs from the previous check.
+If yes, it will send a command with the current (updated) IPs list in use by the cluster to a DbaaS service.
 
 ## Usage
 
@@ -23,3 +23,8 @@ Then apply it with:
 
 You can use this command, to see the output of the script:
 `kubectl logs -n kube-system -l app=exo-k8s-dbaas-filter --tail 100`
+
+## Disclaimer
+
+This script example is provided as-is and can be modified freely. Refer to [Exoscale SKS SLA](https://community.exoscale.com/documentation/sks/overview/#service-level-and-support) to understand the limits of Exoscale Support. If you find a bug or have a suggestion/improvement to make
+we welcome issues or PR in this repository but take no commitment in integrating/resolving these.
