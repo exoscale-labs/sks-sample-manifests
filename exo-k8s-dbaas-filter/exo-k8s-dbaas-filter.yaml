@@ -48,7 +48,7 @@ spec:
     spec:
       serviceAccountName: k8s-dbaas-filter-role
       containers:
-      - image: darnst/exo-kubectl
+      - image: exo.container-registry.com/exoscale-images/exo-kubectl:1.0
         name: exo-kubectl
         imagePullPolicy: IfNotPresent
         resources:
@@ -119,10 +119,10 @@ spec:
                   # the command for updating the IPs of the database
                   # Replace the ZONE (de-fra-1) and the NAME (testdatabase1...) of the database
                   # -----------------------------------------------------
-                  exo dbaas update --pg-ip-filter "$IPLISTFOREXO" testdabatase1 -z de-fra-1
-                  # exo dbaas update --mysql-ip-filter $IPLISTFOREXO testdabatase1 -z de-fra-1
-                  # exo dbaas update --kafka-ip-filter $IPLISTFOREXO testdabatase1 -z de-fra-1
-                  # exo dbaas update --redis-ip-filter $IPLISTFOREXO testdabatase1 -z de-fra-1
+                  exo dbaas update --pg-ip-filter "$IPLISTFOREXO" testdatabase1 -z de-fra-1
+                  # exo dbaas update --mysql-ip-filter $IPLISTFOREXO testdatabase1 -z de-fra-1
+                  # exo dbaas update --kafka-ip-filter $IPLISTFOREXO testdatabase1 -z de-fra-1
+                  # exo dbaas update --redis-ip-filter $IPLISTFOREXO testdatabase1 -z de-fra-1
                   # -----------------------------------------------------
                   # =====================================================
                 fi

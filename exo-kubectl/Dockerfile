@@ -1,8 +1,8 @@
-FROM alpine:3.14
+FROM alpine:3.15
 
-ARG HELM_VERSION=3.7.2
-ARG KUBECTL_VERSION=1.23.0
-ARG EXOSCALE_CLI_VERSION=1.49.1
+ARG HELM_VERSION=3.8.1
+ARG KUBECTL_VERSION=1.23.4
+ARG EXOSCALE_CLI_VERSION=1.51.2
 
 # Install helm (latest release)
 # ENV BASE_URL="https://storage.googleapis.com/kubernetes-helm"
