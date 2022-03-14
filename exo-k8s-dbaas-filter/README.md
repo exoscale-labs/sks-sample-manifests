@@ -5,15 +5,14 @@ If yes, it will send a command with the current (updated) IPs list in use by the
 
 ## Usage
 
-Create an IAM API Key restricted to DBaaS and in turn restricted to getDBaaSService, listDBaaSServices and updateDBaaSService.
+Create an IAM API Key restricted to DBaaS and in turn restricted to `getDBaaSService`, `listDBaaSServices` and `updateDBaaSService`.
 Make sure that you can access your SKS cluster with *kubectl* from your computer.
-Then run the following commands, which will in turn call generate-secret.sh, which uses `kubectl apply` to create a secret with your API keys.
-```bash
-export EXOSCALE_API_KEY=HEREYOURKEY
-export EXOSCALE_API_SECRET=HEREYOURSECRET
 
-chmod +x generate-secret.sh
-./generate-secret.sh
+Then run the following command to create a secret with your API keys.
+```bash
+kubectl -n kube-system create secret generic exoscale-api-credentials \
+   --from-literal=api-key='HEREYOURKEY' \
+   --from-literal=api-secret='HEREYOURSECRET'
 ```
 
 Then open the manifest exo-k8s-dbaas-filter.yaml. Near the bottom of the script, you can find the command beginning with `exo dbaas`. Replace the zone and the name of the database (or even add more databases) of which the ip_filter property should be automatically updated. A few lines above that you also have the option to add more static IPs.

@@ -43,7 +43,6 @@ spec:
   strategy: {}
   template:
     metadata:
-      creationTimestamp: null
       labels:
         app: exo-k8s-dbaas-filter
     spec:
@@ -52,6 +51,13 @@ spec:
       - image: darnst/exo-kubectl
         name: exo-kubectl
         imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: 30m
+            memory: 16Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
         env:
           - name: EXOSCALE_API_KEY
             valueFrom:
@@ -82,9 +88,6 @@ spec:
               FILE1=$(mktemp /tmp/dbaas-filter.XXXXXX)
               # IPs of last run
               FILE2=$(mktemp /tmp/dbaas-filter.XXXXXX)
-
-              echo "APIKEY"
-              echo $EXOSCALE_API_KEY
 
               echo "" > $FILE1
               echo "" > $FILE2
