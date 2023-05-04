@@ -48,7 +48,7 @@ spec:
     spec:
       serviceAccountName: k8s-dbaas-filter-role
       containers:
-      - image: exo.container-registry.com/exoscale-images/exo-kubectl:1.0
+      - image: exo.container-registry.com/exoscale-images/exo-kubectl:latest
         name: exo-kubectl
         imagePullPolicy: IfNotPresent
         resources:
