@@ -1,4 +1,4 @@
-FROM alpine:3.15
+FROM alpine:3.19
 
 ARG HELM_VERSION=3.8.1
 ARG KUBECTL_VERSION=1.23.4
@@ -26,6 +26,9 @@ RUN curl -sLO https://github.com/exoscale/cli/releases/download/v${EXOSCALE_CLI_
 RUN apk add --update --no-cache jq
 
 RUN addgroup -S app && adduser -S -G app app
+
+RUN apk update && \
+    apk upgrade
 
 USER app
 
