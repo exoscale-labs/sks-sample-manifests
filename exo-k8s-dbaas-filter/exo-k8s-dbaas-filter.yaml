@@ -96,39 +96,40 @@ spec:
               do
                 # get a sorted list of all ips in the cluster to FILE1
                 kubectl get nodes -o json | jq '[.items[] | .status .addresses[] | select(.type=="ExternalIP")] | sort_by(.address) | .[].address' > $FILE1
-
-
-                cmp -s $FILE1 $FILE2
-                if [ "$?" == "1" ]
+                if [ -s $FILE1 ]
                 then
-                  echo "New IPs detected, updating database"
-                  # Ips differ
-                  # Remove newlines, ", and trim
-                  IPLISTFOREXO=`cat $FILE1 | sed 'H;${x;s/\n/,/g;s/^,//;p;};d' | sed 's/"//g' | xargs`
+                  cmp -s $FILE1 $FILE2
+                  if [ "$?" == "1" ]
+                  then
+                    echo "New IPs detected, updating ipfilter"
+                    # Ips differ
+                    # Remove newlines, ", and trim
+                    IPLISTFOREXO=`cat $FILE1 | sed 'H;${x;s/\n/,/g;s/^,//;p;};d' | sed 's/"//g' | xargs`
 
-                  # You can also add here additional static IPS
-                  # Make sure to prefix the list with a comma
-                  # -----------------------------------------------------
-                  # IPLISTFOREXO+=",123.111.33.88,66.33.45.66"
-                  # -----------------------------------------------------
+                    # You can also add here additional static IPS
+                    # Make sure to prefix the list with a comma
+                    # -----------------------------------------------------
+                    # IPLISTFOREXO+=",123.111.33.88,66.33.45.66"
+                    # -----------------------------------------------------
 
-                  echo "Using IPs: $IPLISTFOREXO"
+                    echo "Using IPs: $IPLISTFOREXO"
 
-                  # =====================================================
-                  # EDIT HERE
-                  # the command for updating the IPs of the database
-                  # Replace the ZONE (de-fra-1) and the NAME (testdatabase1...) of the database
-                  # -----------------------------------------------------
-                  exo dbaas update --pg-ip-filter "$IPLISTFOREXO" testdatabase1 -z de-fra-1
-                  # exo dbaas update --mysql-ip-filter $IPLISTFOREXO testdatabase1 -z de-fra-1
-                  # exo dbaas update --kafka-ip-filter $IPLISTFOREXO testdatabase1 -z de-fra-1
-                  # exo dbaas update --redis-ip-filter $IPLISTFOREXO testdatabase1 -z de-fra-1
-                  # -----------------------------------------------------
-                  # =====================================================
+                    # =====================================================
+                    # EDIT HERE
+                    # the command for updating the IPs of the database
+                    # Replace the ZONE (de-fra-1) and the NAME (testdatabase1...) of the database
+                    # -----------------------------------------------------
+                    exo dbaas update --pg-ip-filter "$IPLISTFOREXO" testdatabase1 -z de-fra-1
+                    # exo dbaas update --mysql-ip-filter $IPLISTFOREXO testdatabase1 -z de-fra-1
+                    # exo dbaas update --kafka-ip-filter $IPLISTFOREXO testdatabase1 -z de-fra-1
+                    # exo dbaas update --redis-ip-filter $IPLISTFOREXO testdatabase1 -z de-fra-1
+                    # -----------------------------------------------------
+                    # =====================================================
+                  fi
+                  cat $FILE1 > $FILE2
+                else
+                  echo "Empty Nodelist from kubectl - doing nothing!"
                 fi
-
-                cat $FILE1 > $FILE2
                 sleep 10
               done
-
               EOF
