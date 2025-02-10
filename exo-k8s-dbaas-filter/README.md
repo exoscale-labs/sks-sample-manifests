@@ -5,7 +5,25 @@ If yes, it will send a command with the current (updated) IPs list in use by the
 
 ## Usage
 
-Create an IAM API Key restricted to DBaaS and in turn restricted to `getDBaaSService`, `listDBaaSServices` and `updateDBaaSService`.
+Create an IAM API Key. Here is an example role for Postgres:
+```json
+{
+  "default-service-strategy": "deny",
+  "services": {
+    "dbaas": {
+      "type": "rules",
+      "rules": [
+        {
+          "expression": "operation in ['get-dbaas-service-pg', 'list-dbaas-services', 'get-dbaas-settings-pg', 'update-dbaas-service-pg']",
+          "action": "allow"
+        }
+      ]
+    }
+  }
+}
+```
+
+
 Make sure that you can access your SKS cluster with *kubectl* from your computer.
 
 Then run the following command to create a secret with your API keys.
