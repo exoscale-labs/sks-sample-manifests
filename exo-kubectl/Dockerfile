@@ -1,8 +1,8 @@
-FROM alpine:3.19
+FROM alpine:3.21
 
 ARG HELM_VERSION=3.8.1
-ARG KUBECTL_VERSION=1.23.4
-ARG EXOSCALE_CLI_VERSION=1.76.1
+#ARG KUBECTL_VERSION=1.23.4
+ARG EXOSCALE_CLI_VERSION=1.84.0
 
 # Install helm (latest release)
 # ENV BASE_URL="https://storage.googleapis.com/kubernetes-helm"
@@ -14,7 +14,11 @@ RUN apk add --update --no-cache curl ca-certificates bash git && \
     chmod +x /usr/bin/helm && \
     rm -rf linux-amd64
 
-RUN curl -sLO https://storage.googleapis.com/kubernetes-release/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl && \
+# RUN curl -sLO https://storage.googleapis.com/kubernetes-release/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl && \
+#     mv kubectl /usr/bin/kubectl && \
+#     chmod +x /usr/bin/kubectl
+
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
     mv kubectl /usr/bin/kubectl && \
     chmod +x /usr/bin/kubectl
 
