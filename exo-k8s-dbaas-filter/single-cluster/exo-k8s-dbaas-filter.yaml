@@ -117,12 +117,13 @@ spec:
                     # =====================================================
                     # EDIT HERE
                     # the command for updating the IPs of the database
-                    # Replace the ZONE (de-fra-1) and the NAME (testdatabase1...) of the database
+                    # Replace the ZONE (de-fra-1) and the NAME (pool-with-dbaas-prod...) of the database
                     # -----------------------------------------------------
-                    exo dbaas update --pg-ip-filter "$IPLISTFOREXO" testdatabase1 -z de-fra-1
-                    # exo dbaas update --mysql-ip-filter $IPLISTFOREXO testdatabase1 -z de-fra-1
-                    # exo dbaas update --kafka-ip-filter $IPLISTFOREXO testdatabase1 -z de-fra-1
-                    # exo dbaas update --redis-ip-filter $IPLISTFOREXO testdatabase1 -z de-fra-1
+                    exo dbaas update --pg-ip-filter "$IPLISTFOREXO" pool-with-dbaas-prod -z de-fra-1
+                    # exo dbaas update --mysql-ip-filter $IPLISTFOREXO my-mysql-db -z de-fra-1
+                    # exo dbaas update --kafka-ip-filter $IPLISTFOREXO my-kafka-db -z de-fra-1
+                    # exo dbaas update --opensearch-ip-filter $IPLISTFOREXO my-opensearch-db -z de-fra-1
+                    # exo dbaas update --valkey-ip-filter $IPLISTFOREXO my-valkey-db -z de-fra-1
                     # -----------------------------------------------------
                     # =====================================================
                   fi

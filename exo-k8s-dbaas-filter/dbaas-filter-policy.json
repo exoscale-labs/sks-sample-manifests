@@ -1,0 +1,27 @@
+{
+  "default-service-strategy": "deny",
+  "services": {
+    "dbaas": {
+      "type": "rules",
+      "rules": [
+        {
+          "expression": "operation in ['list-dbaas-services', 'get-dbaas-service-pg', 'get-dbaas-service-mysql', 'get-dbaas-service-kafka', 'get-dbaas-service-opensearch', 'get-dbaas-service-valkey', 'get-dbaas-service-grafana', 'get-dbaas-settings-pg', 'get-dbaas-settings-mysql', 'get-dbaas-settings-kafka', 'get-dbaas-settings-opensearch', 'get-dbaas-settings-valkey', 'get-dbaas-settings-grafana']",
+          "action": "allow"
+        },
+        {
+          "expression": "operation in ['update-dbaas-service-pg', 'update-dbaas-service-mysql', 'update-dbaas-service-kafka', 'update-dbaas-service-opensearch', 'update-dbaas-service-valkey', 'update-dbaas-service-grafana'] && parameters.has('ip_filter') && int(parameters.size()) == 2",
+          "action": "allow"
+        }
+      ]
+    },
+    "compute": {
+      "type": "rules",
+      "rules": [
+        {
+          "expression": "operation in ['list-zones', 'get-operation', 'list-sks-clusters', 'get-sks-cluster', 'list-sks-cluster-nodepools', 'get-sks-nodepool', 'list-instance-pools', 'get-instance-pool', 'list-instances', 'get-instance', 'get-security-group', 'list-security-groups', 'get-instance-type', 'get-template', 'get-reverse-dns-instance']",
+          "action": "allow"
+        }
+      ]
+    }
+  }
+}

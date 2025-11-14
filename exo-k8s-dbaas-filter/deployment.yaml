@@ -1,0 +1,95 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exoscale-automation
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dbaas-filter-config
+  namespace: exoscale-automation
+data:
+  # SKS Clusters to monitor (format: "cluster-name:zone,cluster-name:zone")
+  sks-clusters: "my-cluster:ch-gva-2"
+
+  # DBaaS services to update (format: "db-name:zone:type,db-name:zone:type")
+  # Supported types: pg, mysql, kafka, opensearch, valkey, grafana
+  dbaas-services: "my-postgres-db:ch-gva-2:pg"
+
+  # Optional: Static IPs to always include (CIDR format)
+  static-ips: ""  # Example: "192.168.1.1/32,10.0.0.0/24"
+
+  # Check interval in seconds
+  check-interval: "10"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: exo-dbaas-filter
+  namespace: exoscale-automation
+  labels:
+    app: exo-dbaas-filter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: exo-dbaas-filter
+  template:
+    metadata:
+      labels:
+        app: exo-dbaas-filter
+    spec:
+      containers:
+      - name: exo-dbaas-filter
+        image: exo.container-registry.com/exoscale-images/exo-kubectl:latest
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        env:
+          - name: EXOSCALE_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: exoscale-api-credentials
+                key: api-key
+          - name: EXOSCALE_API_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: exoscale-api-credentials
+                key: api-secret
+          - name: SKS_CLUSTERS_CONFIG
+            valueFrom:
+              configMapKeyRef:
+                name: dbaas-filter-config
+                key: sks-clusters
+          - name: DBAAS_SERVICES_CONFIG
+            valueFrom:
+              configMapKeyRef:
+                name: dbaas-filter-config
+                key: dbaas-services
+          - name: STATIC_IPS_CONFIG
+            valueFrom:
+              configMapKeyRef:
+                name: dbaas-filter-config
+                key: static-ips
+          - name: CHECK_INTERVAL
+            valueFrom:
+              configMapKeyRef:
+                name: dbaas-filter-config
+                key: check-interval
+        command:
+          - /bin/bash
+          - /scripts/exo-dbaas-filter.sh
+        volumeMounts:
+          - name: script
+            mountPath: /scripts
+      volumes:
+        - name: script
+          configMap:
+            name: dbaas-filter-script
+            defaultMode: 0755
