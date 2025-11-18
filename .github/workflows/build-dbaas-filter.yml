@@ -43,7 +43,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=match,pattern=dbaas-filter-v(.*),group=1
-            type=sha,prefix={{branch}}-
+            type=sha,prefix=sha-,enable={{is_default_branch}}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
