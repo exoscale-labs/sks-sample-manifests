@@ -5,11 +5,3 @@ namespace: exoscale-automation
 
 resources:
   - deployment.yaml
-
-configMapGenerator:
-  - name: dbaas-filter-script
-    files:
-      - exo-dbaas-filter.sh
-
-generatorOptions:
-  disableNameSuffixHash: true

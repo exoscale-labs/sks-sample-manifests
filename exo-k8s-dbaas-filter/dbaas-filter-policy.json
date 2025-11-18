@@ -18,7 +18,7 @@
       "type": "rules",
       "rules": [
         {
-          "expression": "operation in ['list-zones', 'get-operation', 'list-sks-clusters', 'get-sks-cluster', 'list-sks-cluster-nodepools', 'get-sks-nodepool', 'list-instance-pools', 'get-instance-pool', 'list-instances', 'get-instance', 'get-security-group', 'list-security-groups', 'get-instance-type', 'get-template', 'get-reverse-dns-instance']",
+          "expression": "operation in ['list-zones', 'list-sks-clusters', 'get-sks-cluster', 'get-instance-pool', 'get-instance']",
           "action": "allow"
         }
       ]

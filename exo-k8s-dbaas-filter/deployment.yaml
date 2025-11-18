@@ -20,8 +20,11 @@ data:
   # Optional: Static IPs to always include (CIDR format)
   static-ips: ""  # Example: "192.168.1.1/32,10.0.0.0/24"
 
-  # Check interval in seconds
-  check-interval: "10"
+  # Check interval in seconds (default: 10)
+  check-interval: "60"
+
+  # Log level: DEBUG, INFO, WARNING, ERROR (default: INFO)
+  log-level: "INFO"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -42,12 +45,12 @@ spec:
     spec:
       containers:
       - name: exo-dbaas-filter
-        image: exo.container-registry.com/exoscale-images/exo-kubectl:latest
+        image: ghcr.io/exoscale-labs/dbaas-ip-filter:latest
         imagePullPolicy: IfNotPresent
         resources:
           requests:
             cpu: 50m
-            memory: 32Mi
+            memory: 64Mi
           limits:
             cpu: 200m
             memory: 128Mi
@@ -62,17 +65,17 @@ spec:
               secretKeyRef:
                 name: exoscale-api-credentials
                 key: api-secret
-          - name: SKS_CLUSTERS_CONFIG
+          - name: SKS_CLUSTERS
             valueFrom:
               configMapKeyRef:
                 name: dbaas-filter-config
                 key: sks-clusters
-          - name: DBAAS_SERVICES_CONFIG
+          - name: DBAAS_SERVICES
             valueFrom:
               configMapKeyRef:
                 name: dbaas-filter-config
                 key: dbaas-services
-          - name: STATIC_IPS_CONFIG
+          - name: STATIC_IPS
             valueFrom:
               configMapKeyRef:
                 name: dbaas-filter-config
@@ -82,14 +85,8 @@ spec:
               configMapKeyRef:
                 name: dbaas-filter-config
                 key: check-interval
-        command:
-          - /bin/bash
-          - /scripts/exo-dbaas-filter.sh
-        volumeMounts:
-          - name: script
-            mountPath: /scripts
-      volumes:
-        - name: script
-          configMap:
-            name: dbaas-filter-script
-            defaultMode: 0755
+          - name: LOG_LEVEL
+            valueFrom:
+              configMapKeyRef:
+                name: dbaas-filter-config
+                key: log-level
