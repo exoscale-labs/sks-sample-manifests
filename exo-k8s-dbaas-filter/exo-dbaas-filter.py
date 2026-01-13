@@ -174,7 +174,7 @@ class ExoscaleAPI:
 
         # Map short type to API endpoint type
         type_map = {
-            'pg': 'pg',
+            'pg': 'postgres',
             'mysql': 'mysql',
             'kafka': 'kafka',
             'opensearch': 'opensearch',
