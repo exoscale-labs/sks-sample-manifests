@@ -199,7 +199,7 @@ Create IAM role and API key:
 ```bash
 exo iam role create dbaas-filter-role \
   --description "DBaaS IP filter automation" \
-  --policy file://dbaas-filter-policy.json
+  --policy - < dbaas-filter-policy.json
 
 exo iam api-key create dbaas-filter-key --role dbaas-filter-role
 ```
