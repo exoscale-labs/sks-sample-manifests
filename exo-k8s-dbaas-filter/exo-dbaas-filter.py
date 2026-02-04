@@ -64,7 +64,8 @@ def get_config():
 
     # DBaaS services to update (format: "db-name:zone:type,db-name:zone:type")
     # Supported types: pg, mysql, kafka, opensearch, valkey, grafana
-    dbaas_services_str = os.getenv('DBAAS_SERVICES', 'my-postgres-db:ch-gva-2:pg')
+    dbaas_services_str = os.getenv(
+        'DBAAS_SERVICES', 'my-postgres-db:ch-gva-2:pg')
     dbaas_services = []
     for service in dbaas_services_str.split(','):
         service = service.strip()
@@ -145,7 +146,6 @@ class ExoscaleAPI:
         resp.raise_for_status()
         return resp.json()
 
-
     def get_instance_pool(self, pool_id: str, zone: str) -> Dict:
         """Get instance pool details."""
         endpoint = self._get_zone_endpoint(zone)
@@ -178,7 +178,7 @@ class ExoscaleAPI:
             'mysql': 'mysql',
             'kafka': 'kafka',
             'opensearch': 'opensearch',
-            'valkey': 'redis',
+            'valkey': 'valkey',
             'grafana': 'grafana'
         }
         api_type = type_map.get(db_type, db_type)
@@ -219,7 +219,8 @@ def get_cluster_ips(api: ExoscaleAPI, cluster_name: str, zone: str) -> Set[str]:
                 break
 
         if not cluster:
-            logger.warning(f"  Cluster '{cluster_name}' not found in zone {zone}")
+            logger.warning(
+                f"  Cluster '{cluster_name}' not found in zone {zone}")
             return ips
 
         cluster_id = cluster['id']
@@ -231,13 +232,16 @@ def get_cluster_ips(api: ExoscaleAPI, cluster_name: str, zone: str) -> Set[str]:
         for nodepool in nodepools:
             # API returns instance-pool as an object with 'id' field
             instance_pool = nodepool.get('instance-pool', {})
-            pool_id = instance_pool.get('id') if isinstance(instance_pool, dict) else None
+            pool_id = instance_pool.get('id') if isinstance(
+                instance_pool, dict) else None
 
             if not pool_id:
-                logger.debug(f"    Nodepool {nodepool.get('name', 'unknown')} has no instance-pool")
+                logger.debug(
+                    f"    Nodepool {nodepool.get('name', 'unknown')} has no instance-pool")
                 continue
 
-            logger.debug(f"    Nodepool: {nodepool.get('name')}, pool_id: {pool_id}")
+            logger.debug(
+                f"    Nodepool: {nodepool.get('name')}, pool_id: {pool_id}")
 
             # Get instance pool
             pool = api.get_instance_pool(pool_id, zone)
@@ -256,7 +260,8 @@ def get_cluster_ips(api: ExoscaleAPI, cluster_name: str, zone: str) -> Set[str]:
 
                 if ip_address:
                     ips.add(f"{ip_address}/32")
-                    logger.info(f"    Found IP: {ip_address} (instance: {instance.get('name', instance_id)})")
+                    logger.info(
+                        f"    Found IP: {ip_address} (instance: {instance.get('name', instance_id)})")
 
     except requests.exceptions.RequestException as e:
         logger.error(f"  Error querying cluster {cluster_name}: {e}")
@@ -296,7 +301,8 @@ def update_dbaas_services(api: ExoscaleAPI, services: List[Dict], ip_list: List[
         zone = service['zone']
 
         try:
-            logger.info(f"  Updating {db_type} database: {db_name} (zone: {zone})")
+            logger.info(
+                f"  Updating {db_type} database: {db_name} (zone: {zone})")
             api.update_dbaas_ip_filter(db_name, db_type, zone, ip_list)
         except requests.exceptions.RequestException as e:
             logger.error(f"  Failed to update {db_name}: {e}")
@@ -308,7 +314,8 @@ def main():
 
     logger.info("Starting DBaaS IP filter automation")
     logger.info(f"Monitoring {len(config['sks_clusters'])} SKS cluster(s)")
-    logger.info(f"Managing IP filters for {len(config['dbaas_services'])} DBaaS service(s)")
+    logger.info(
+        f"Managing IP filters for {len(config['dbaas_services'])} DBaaS service(s)")
 
     api = ExoscaleAPI(config['api_key'], config['api_secret'])
     previous_ips = set()
@@ -334,7 +341,8 @@ def main():
                     logger.info(f"New IP list: {', '.join(ip_list)}")
 
                     # Update all DBaaS services
-                    update_dbaas_services(api, config['dbaas_services'], ip_list)
+                    update_dbaas_services(
+                        api, config['dbaas_services'], ip_list)
 
                     previous_ips = current_ips
                     logger.info("Update complete.")
