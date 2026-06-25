@@ -151,9 +151,15 @@ How it handles short TTLs (see `deploy/example-egressgateway-dbaas.yaml`):
 - A **rolling window** (`dnsGraceSeconds`) keeps recently-seen IPs routed after
   they leave DNS, so connections drain instead of breaking on every rotation.
 - Supported DBaaS types: `pg`, `mysql`, `valkey`, `opensearch`, `kafka`,
-  `grafana`. `manageDBaaSIPFilter` is **add-only** — it never removes existing
-  entries (including `0.0.0.0/0`), so it can't lock anything out; restricting the
-  filter to only the EIP stays a deliberate manual step.
+  `grafana`.
+- `manageDBaaSIPFilter` is **add-only** — it adds the EIP and never removes
+  existing entries. **Important:** an *empty* DBaaS `ip-filter` means
+  allow-all; adding the EIP to it switches the service to **allow-list mode**,
+  i.e. it now accepts connections *only* from the listed entries. That is the
+  intended lockdown for "DB reachable only via the EIP", but it means enabling
+  this on an open service **will restrict it** — make sure every other source
+  that must reach the DB is already in the filter (or add it) before turning
+  this on. The controller will not add `0.0.0.0/0` for you.
 - Residual race: a brand-new IP that a pod resolves in the seconds before the
   controller's next poll isn't yet routed. For zero-race needs, route a broad
   CIDR instead.
