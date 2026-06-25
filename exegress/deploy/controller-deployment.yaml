@@ -1,17 +1,10 @@
----
-# Exoscale API credentials for the controller. Replace the values (or create the
-# Secret out-of-band) with an IAM key scoped to: compute instance read, private
-# network read, elastic-IP attach/detach. The controller never creates/deletes EIPs.
-apiVersion: v1
-kind: Secret
-metadata:
-  name: exegress-exoscale-creds
-  namespace: kube-system
-type: Opaque
-stringData:
-  api-key: "REPLACE_ME"
-  api-secret: "REPLACE_ME"
----
+# The controller reads ALL its config from a Secret + ConfigMap (see the README
+# quick start for the copy-paste commands that create them) — no need to edit
+# this manifest.
+#
+#   Secret    exegress-exoscale-creds : EXOSCALE_API_KEY, EXOSCALE_API_SECRET
+#   ConfigMap exegress-config         : EXOSCALE_ZONE, EXEGRESS_PN_ID, EXEGRESS_LEADER_ELECT
+#
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,7 +13,7 @@ metadata:
   labels:
     app: exegress-controller
 spec:
-  replicas: 1 # safe to raise to 2 (leader election is enabled below)
+  replicas: 1 # safe to raise to 2 — leader election is enabled
   selector:
     matchLabels:
       app: exegress-controller
@@ -33,23 +26,11 @@ spec:
       containers:
         - name: controller
           image: ghcr.io/exoscale-labs/exegress-controller:latest
-          env:
-            - name: EXOSCALE_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: exegress-exoscale-creds
-                  key: api-key
-            - name: EXOSCALE_API_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: exegress-exoscale-creds
-                  key: api-secret
-            - name: EXOSCALE_ZONE
-              value: "REPLACE_ZONE" # e.g. de-fra-1
-            - name: EXEGRESS_PN_ID
-              value: "REPLACE_PRIVATE_NETWORK_UUID"
-            - name: EXEGRESS_LEADER_ELECT
-              value: "true"
+          envFrom:
+            - secretRef:
+                name: exegress-exoscale-creds
+            - configMapRef:
+                name: exegress-config
           resources:
             requests:
               cpu: 25m

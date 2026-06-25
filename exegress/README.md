@@ -27,16 +27,42 @@ controller re-attaches the EIP to a healthy node and rewires routing
   on every node, EIP alias + destination-scoped SNAT on the active gateway.
 
 ```
-pod ─(CNI natOutgoing: SNAT pod→node private IP)→ node eth1
-node ─(route: dest CIDR via gateway private IP, dev eth1)→ gateway node
-gateway ─(SNAT dest→EIP, dev eth0)→ internet   (source = EIP)
+                          Internet
+                 (destination CIDR, e.g. mail relay)
+                              ^
+                              |   src = Elastic IP
+                              |
+          +-------------------+--------------------+
+          |  GATEWAY NODE  (holds the Elastic IP)  |
+          |    eth0 : <EIP>/32 aliased             |
+          |    nat  : POSTROUTING -d <dest>        |
+          |           -o eth0 -j SNAT --to <EIP>   |
+          +-------------------+--------------------+
+                              ^
+                              |   private network (eth1)
+                              |   src = worker node private IP
+          +-------------------+--------------------+
+          |  WORKER NODE                           |
+          |    route: <dest> via <gw-priv-ip> eth1 |
+          |    CNI natOutgoing:                    |
+          |       SNAT pod IP -> node private IP    |
+          +-------------------+--------------------+
+                              ^
+                              |
+                          +---+----+
+                          |  Pod   |   curl <dest>
+                          +--------+
+
+Reply traffic retraces the path: it arrives on the gateway's Elastic IP,
+conntrack reverses both SNATs, and it lands back in the pod.
 ```
 
 ## Prerequisites
 
 - SKS nodepool attached to a **managed private network**.
-- CNI does pod→node masquerade by default (Calico `natOutgoing` / Cilium
-  masquerade — both true on managed SKS).
+- CNI does pod→node masquerade by default. **Validated on Calico**
+  (`natOutgoing`). Cilium's masquerade is expected to behave the same, but is
+  **not yet tested** — verify before relying on it.
 - A pre-created, `manual`-type Elastic IP (the controller never creates/deletes
   EIPs). Its address goes on the partner's allowlist.
 
@@ -44,6 +70,9 @@ gateway ─(SNAT dest→EIP, dev eth0)→ internet   (source = EIP)
 
 The controller image is built by CI to
 `ghcr.io/exoscale-labs/exegress-controller`.
+
+No manifest editing required — all config is supplied via a Secret and a
+ConfigMap you create on the command line.
 
 ```bash
 # 1. CRD + RBAC + node agent
@@ -53,16 +82,42 @@ kubectl -n kube-system create configmap exegress-agent-script \
   --from-file=agent.sh=hack/agent.sh
 kubectl apply -f deploy/agent-daemonset.yaml
 
-# 2. Controller: edit deploy/controller-deployment.yaml (Exoscale creds Secret,
-#    EXOSCALE_ZONE, EXEGRESS_PN_ID), then:
+# 2. Controller config — paste your values, no YAML to edit:
+kubectl -n kube-system create secret generic exegress-exoscale-creds \
+  --from-literal=EXOSCALE_API_KEY=EXOxxxxxxxxxxxxxxxxxxxx \
+  --from-literal=EXOSCALE_API_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+kubectl -n kube-system create configmap exegress-config \
+  --from-literal=EXOSCALE_ZONE=de-fra-1 \
+  --from-literal=EXEGRESS_PN_ID=<private-network-uuid> \
+  --from-literal=EXEGRESS_LEADER_ELECT=true
+
 kubectl apply -f deploy/controller-deployment.yaml
 
 # 3. Mark eligible gateway nodes
 kubectl label node <node> exegress.io/eligible=true
 
-# 4. Create an EgressGateway (see deploy/example-egressgateway.yaml)
-kubectl apply -f deploy/example-egressgateway.yaml
+# 4. Create an EgressGateway — paste your EIP + destinations, no file to edit:
+kubectl apply -f - <<'EOF'
+apiVersion: exegress.io/v1alpha1
+kind: EgressGateway
+metadata:
+  name: mail-relay
+spec:
+  elasticIP:
+    id: "<elastic-ip-uuid>"
+    address: "<elastic-ip-address>"
+  destinations:
+    - "192.0.2.25/32"          # e.g. the partner mail relay
+  gatewayNodeSelector:
+    matchLabels:
+      exegress.io/eligible: "true"
+EOF
 ```
+
+To update config later, re-create the Secret/ConfigMap (e.g. with
+`kubectl create ... --dry-run=client -o yaml | kubectl apply -f -`) and restart
+the controller: `kubectl -n kube-system rollout restart deploy/exegress-controller`.
 
 ### Local run (development)
 
@@ -82,6 +137,7 @@ EXOSCALE_API_KEY=… EXOSCALE_API_SECRET=… EXOSCALE_ZONE=de-fra-1 \
 | Gateway datapath | EIP aliased on `eth0`; `nat POSTROUTING -d <dest> -j SNAT --to-source <EIP>` present |
 | Failover (`stop` active node) | controller moved the EIP to the other node in seconds; egress still returned the same EIP |
 | Stickiness | recovered node did not trigger fail-back (no flapping) |
+| Controller **in-cluster** (GHCR image + leader election) | acquired the lease, reconciled, and performed the same node-stop failover while running as a Deployment |
 
 ## Status / roadmap
 
