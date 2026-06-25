@@ -1,0 +1,14 @@
+# Build artifacts
+bin/
+dist/
+*.test
+
+# Local cluster access / secrets — never commit
+*.kubeconfig
+kubeconfig*.yaml
+
+# Claude Code / agent tooling artifacts (not part of the project)
+.claude/
+CLAUDE.md
+docs/superpowers/
+.DS_Store

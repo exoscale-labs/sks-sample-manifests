@@ -1,0 +1,16 @@
+apiVersion: exegress.io/v1alpha1
+kind: EgressGateway
+metadata:
+  name: mail-relay
+spec:
+  elasticIP:
+    id: "REPLACE_WITH_EIP_UUID"
+    address: "REPLACE_WITH_EIP_ADDRESS"
+  destinations:
+    - "192.0.2.25/32" # e.g. the A1 mail relay
+  gatewayNodeSelector:
+    matchLabels:
+      exegress.io/eligible: "true"
+  # interfaces:        # optional; defaults to eth0/eth1 on Exoscale nodes
+  #   public: eth0
+  #   private: eth1

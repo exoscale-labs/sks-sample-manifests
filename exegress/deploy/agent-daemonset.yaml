@@ -1,0 +1,62 @@
+---
+# Shared state, maintained by the controller. Agents mount it read-only.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: exegress-state
+  namespace: kube-system
+data:
+  state.json: |
+    {"gateways":[]}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: exegress-agent
+  namespace: kube-system
+  labels:
+    app: exegress-agent
+spec:
+  selector:
+    matchLabels:
+      app: exegress-agent
+  template:
+    metadata:
+      labels:
+        app: exegress-agent
+    spec:
+      hostNetwork: true
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: agent
+          image: alpine:3.20
+          command: ["sh", "/opt/agent.sh"]
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["NET_ADMIN", "NET_RAW"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: script
+              mountPath: /opt
+            - name: state
+              mountPath: /etc/exegress
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      volumes:
+        - name: script
+          configMap:
+            name: exegress-agent-script
+        - name: state
+          configMap:
+            name: exegress-state

@@ -1,0 +1,46 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: exegress-controller
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: exegress-controller
+rules:
+  - apiGroups: ["exegress.io"]
+    resources: ["egressgateways"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["exegress.io"]
+    resources: ["egressgateways/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # Leader election (when EXEGRESS_LEADER_ELECT=true)
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: exegress-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: exegress-controller
+subjects:
+  - kind: ServiceAccount
+    name: exegress-controller
+    namespace: kube-system
+# Note: the node agent is purely file-driven (reads a mounted ConfigMap) and
+# needs no Kubernetes API access, hence no RBAC.
