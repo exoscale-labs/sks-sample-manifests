@@ -60,9 +60,9 @@ conntrack reverses both SNATs, and it lands back in the pod.
 ## Prerequisites
 
 - SKS nodepool attached to a **managed private network**.
-- CNI does pod→node masquerade by default. **Validated on Calico**
-  (`natOutgoing`). Cilium's masquerade is expected to behave the same, but is
-  **not yet tested** — verify before relying on it.
+- CNI does pod→node masquerade by default. **Validated on both Calico
+  (`natOutgoing`) and Cilium** on managed SKS — egress and failover work the
+  same on each.
 - A pre-created, `manual`-type Elastic IP (the controller never creates/deletes
   EIPs). Its address goes on the partner's allowlist.
 
@@ -129,7 +129,7 @@ EXOSCALE_API_KEY=… EXOSCALE_API_SECRET=… EXOSCALE_ZONE=de-fra-1 \
   EXEGRESS_PN_ID=<private-network-uuid> go run ./cmd/controller
 ```
 
-## Validated end-to-end (SKS, de-fra-1, Calico)
+## Validated end-to-end (SKS, de-fra-1, on both Calico and Cilium)
 
 | Test | Result |
 |---|---|
