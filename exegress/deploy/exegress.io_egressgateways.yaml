@@ -51,14 +51,35 @@ spec:
           spec:
             description: EgressGatewaySpec defines the desired state of an EgressGateway.
             properties:
-              destinations:
+              dbaasServices:
                 description: |-
-                  Destinations is the list of CIDRs whose traffic is routed through the
-                  gateway node and SNAT'd to the Elastic IP.
+                  DBaaSServices references Exoscale DBaaS services by name. The controller
+                  resolves each service's endpoint host(s) via the DBaaS API, then DNS, and
+                  routes the resulting IPs through the gateway.
                 items:
                   type: string
-                minItems: 1
                 type: array
+              destinationDNS:
+                description: |-
+                  DestinationDNS is a list of hostnames (A records) the controller resolves
+                  and refreshes; their current IPs are routed through the gateway.
+                items:
+                  type: string
+                type: array
+              destinations:
+                description: |-
+                  Destinations is the list of static CIDRs whose traffic is routed through
+                  the gateway node and SNAT'd to the Elastic IP. These take the simple,
+                  fully-static path (no DNS, no periodic resolution).
+                items:
+                  type: string
+                type: array
+              dnsGraceSeconds:
+                description: |-
+                  DNSGraceSeconds keeps a resolved IP routed this long after it stops
+                  appearing in DNS (rolling window for short-TTL / failover churn).
+                  Defaults to 300.
+                type: integer
               elasticIP:
                 description: ElasticIP is the pinned EIP to use as the egress source.
                 properties:
@@ -132,8 +153,18 @@ spec:
                       (default eth0).
                     type: string
                 type: object
+              manageDBaaSIPFilter:
+                description: |-
+                  ManageDBaaSIPFilter, when true, ensures the Elastic IP is present in the
+                  ip-filter of each referenced DBaaS service. Add-only: existing entries
+                  (including 0.0.0.0/0) are never removed.
+                type: boolean
+              resolveIntervalSeconds:
+                description: |-
+                  ResolveIntervalSeconds is how often DNS/DBaaS destinations are refreshed.
+                  Ignored when only static Destinations are set. Defaults to 30.
+                type: integer
             required:
-            - destinations
             - elasticIP
             - gatewayNodeSelector
             type: object
@@ -217,6 +248,12 @@ spec:
                 description: ObservedGeneration is the spec generation last reconciled.
                 format: int64
                 type: integer
+              resolvedDestinations:
+                description: ResolvedDestinations is the current routed CIDR set (static
+                  + resolved).
+                items:
+                  type: string
+                type: array
             type: object
         type: object
     served: true

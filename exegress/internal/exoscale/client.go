@@ -21,4 +21,10 @@ type Exo interface {
 	AttachEIP(ctx context.Context, eipID, instanceID string) error
 	// DetachEIP detaches the Elastic IP from the instance.
 	DetachEIP(ctx context.Context, eipID, instanceID string) error
+
+	// DBaaSService returns a DBaaS service's type, endpoint host(s) and current
+	// ip-filter. Used to resolve dynamic destinations and manage the allowlist.
+	DBaaSService(ctx context.Context, name string) (svcType string, hosts []string, ipFilter []string, err error)
+	// SetDBaaSIPFilter sets the ip-filter of the named service (dispatched by type).
+	SetDBaaSIPFilter(ctx context.Context, name, svcType string, filter []string) error
 }

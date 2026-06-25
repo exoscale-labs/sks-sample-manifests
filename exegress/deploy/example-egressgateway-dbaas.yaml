@@ -1,0 +1,25 @@
+# Egress to an Exoscale DBaaS service whose endpoint IP can change.
+# The controller resolves the service endpoint (via the DBaaS API + DNS),
+# keeps the routed IPs fresh, and ensures the EIP is in the service ip-filter.
+apiVersion: exegress.io/v1alpha1
+kind: EgressGateway
+metadata:
+  name: dbaas-egress
+spec:
+  elasticIP:
+    id: "<elastic-ip-uuid>"
+    address: "<elastic-ip-address>"
+  # Reference your Exoscale DBaaS service(s) by name:
+  dbaasServices:
+    - "my-pg"
+  manageDBaaSIPFilter: true     # ensure the EIP is allowed (add-only)
+  resolveIntervalSeconds: 10    # match a short DBaaS DNS TTL
+  dnsGraceSeconds: 300          # keep departed IPs routed while connections drain
+  # You can also mix in raw FQDNs and static CIDRs:
+  # destinationDNS:
+  #   - "partner-api.example.com"
+  # destinations:
+  #   - "192.0.2.25/32"
+  gatewayNodeSelector:
+    matchLabels:
+      exegress.io/eligible: "true"

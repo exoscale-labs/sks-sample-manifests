@@ -13,7 +13,7 @@ metadata:
   labels:
     app: exegress-controller
 spec:
-  replicas: 1 # safe to raise to 2 — leader election is enabled
+  replicas: 2 # leader election is enabled; the standby takes over on node loss
   selector:
     matchLabels:
       app: exegress-controller
@@ -23,6 +23,17 @@ spec:
         app: exegress-controller
     spec:
       serviceAccountName: exegress-controller
+      # Spread replicas across nodes so a single node eviction can't take out
+      # both. Preferred (not required) so it still schedules on a 1-node cluster.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: exegress-controller
       containers:
         - name: controller
           image: ghcr.io/exoscale-labs/exegress-controller:latest

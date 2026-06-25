@@ -6,35 +6,56 @@ import "sort"
 
 // NodeInfo is the minimal node view the selector needs.
 type NodeInfo struct {
-	Name  string
+	Name string
+	// Ready is the Kubernetes NodeReady condition.
 	Ready bool
+	// Schedulable is false when the node is cordoned (spec.unschedulable),
+	// which signals it is being drained / about to be removed.
+	Schedulable bool
 }
 
 // SelectActiveNode picks the active gateway node from the eligible set.
 //
-// It is sticky: if current is still eligible and Ready it is kept, avoiding
-// needless EIP failover. Otherwise the lowest-sorted Ready eligible node is
-// chosen for determinism. Returns ("", false) when no Ready node exists.
+// Preference order, for graceful drains and upgrades:
+//   - a node must be Ready to be chosen at all;
+//   - Ready AND Schedulable nodes are preferred (a cordoned node is being
+//     drained, so we proactively move the gateway off it *before* it dies);
+//   - sticky: the current node is kept only if it is still Ready and
+//     Schedulable, avoiding needless EIP failover;
+//   - if no Ready+Schedulable node exists, fall back to any Ready node (a
+//     fully-cordoned but live cluster should still egress).
+//
+// Returns ("", false) when no Ready node exists.
 func SelectActiveNode(eligible []NodeInfo, current string) (string, bool) {
-	byName := make(map[string]bool, len(eligible))
+	info := make(map[string]NodeInfo, len(eligible))
 	for _, n := range eligible {
-		byName[n.Name] = n.Ready
+		info[n.Name] = n
 	}
-	if current != "" {
-		if ready, ok := byName[current]; ok && ready {
-			return current, true
+
+	// Stickiness: keep current only if it is Ready and Schedulable.
+	if cur, ok := info[current]; ok && cur.Ready && cur.Schedulable {
+		return current, true
+	}
+
+	var schedulable, ready []string
+	for _, n := range eligible {
+		if !n.Ready {
+			continue
+		}
+		ready = append(ready, n.Name)
+		if n.Schedulable {
+			schedulable = append(schedulable, n.Name)
 		}
 	}
 
-	names := make([]string, 0, len(eligible))
-	for _, n := range eligible {
-		if n.Ready {
-			names = append(names, n.Name)
-		}
-	}
-	if len(names) == 0 {
+	switch {
+	case len(schedulable) > 0:
+		sort.Strings(schedulable)
+		return schedulable[0], true
+	case len(ready) > 0:
+		sort.Strings(ready)
+		return ready[0], true
+	default:
 		return "", false
 	}
-	sort.Strings(names)
-	return names[0], true
 }

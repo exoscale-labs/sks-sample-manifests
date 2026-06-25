@@ -16,6 +16,15 @@ type Fake struct {
 	EIPAddr map[string]string
 	// Attachments maps EIP UUID -> set of instance UUIDs.
 	Attachments map[string][]string
+	// DBaaS maps service name -> fake service (type, hosts, ip-filter).
+	DBaaS map[string]*FakeDBaaS
+}
+
+// FakeDBaaS is a stand-in DBaaS service for tests.
+type FakeDBaaS struct {
+	Type     string
+	Hosts    []string
+	IPFilter []string
 }
 
 // NewFake returns an initialised Fake.
@@ -25,7 +34,25 @@ func NewFake() *Fake {
 		PrivateIPs:      map[string]string{},
 		EIPAddr:         map[string]string{},
 		Attachments:     map[string][]string{},
+		DBaaS:           map[string]*FakeDBaaS{},
 	}
+}
+
+func (f *Fake) DBaaSService(_ context.Context, name string) (string, []string, []string, error) {
+	s, ok := f.DBaaS[name]
+	if !ok {
+		return "", nil, nil, fmt.Errorf("dbaas service %q not found", name)
+	}
+	return s.Type, append([]string(nil), s.Hosts...), append([]string(nil), s.IPFilter...), nil
+}
+
+func (f *Fake) SetDBaaSIPFilter(_ context.Context, name, _ string, filter []string) error {
+	s, ok := f.DBaaS[name]
+	if !ok {
+		return fmt.Errorf("dbaas service %q not found", name)
+	}
+	s.IPFilter = append([]string(nil), filter...)
+	return nil
 }
 
 func (f *Fake) InstanceIDByName(_ context.Context, name string) (string, error) {

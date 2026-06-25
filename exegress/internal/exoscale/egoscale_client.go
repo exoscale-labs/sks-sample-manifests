@@ -3,6 +3,8 @@ package exoscale
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 
 	v3 "github.com/exoscale/egoscale/v3"
 	"github.com/exoscale/egoscale/v3/credentials"
@@ -106,4 +108,110 @@ func (e *egoClient) DetachEIP(ctx context.Context, eipID, instanceID string) err
 		return fmt.Errorf("wait detach EIP: %w", err)
 	}
 	return nil
+}
+
+// dbaasTypeOf resolves a DBaaS service name to its type (pg, mysql, ...).
+func (e *egoClient) dbaasTypeOf(ctx context.Context, name string) (string, error) {
+	list, err := e.c.ListDBAASServices(ctx)
+	if err != nil {
+		return "", fmt.Errorf("list dbaas services: %w", err)
+	}
+	for _, s := range list.DBAASServices {
+		if string(s.Name) == name {
+			return string(s.Type), nil
+		}
+	}
+	return "", fmt.Errorf("dbaas service %q not found", name)
+}
+
+func (e *egoClient) DBaaSService(ctx context.Context, name string) (string, []string, []string, error) {
+	typ, err := e.dbaasTypeOf(ctx, name)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	var uri string
+	var ipf []string
+	switch typ {
+	case "pg":
+		s, err := e.c.GetDBAASServicePG(ctx, name)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		uri, ipf = s.URI, s.IPFilter
+	case "mysql":
+		s, err := e.c.GetDBAASServiceMysql(ctx, name)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		uri, ipf = s.URI, s.IPFilter
+	case "valkey":
+		s, err := e.c.GetDBAASServiceValkey(ctx, name)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		uri, ipf = s.URI, s.IPFilter
+	case "opensearch":
+		s, err := e.c.GetDBAASServiceOpensearch(ctx, name)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		uri, ipf = s.URI, s.IPFilter
+	case "kafka":
+		s, err := e.c.GetDBAASServiceKafka(ctx, name)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		uri, ipf = s.URI, s.IPFilter
+	case "grafana":
+		s, err := e.c.GetDBAASServiceGrafana(ctx, name)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		uri, ipf = s.URI, s.IPFilter
+	default:
+		return "", nil, nil, fmt.Errorf("dbaas service %q has unsupported type %q", name, typ)
+	}
+	return typ, hostsFromURI(uri), ipf, nil
+}
+
+func (e *egoClient) SetDBaaSIPFilter(ctx context.Context, name, svcType string, filter []string) error {
+	var op *v3.Operation
+	var err error
+	switch svcType {
+	case "pg":
+		op, err = e.c.UpdateDBAASServicePG(ctx, name, v3.UpdateDBAASServicePGRequest{IPFilter: filter})
+	case "mysql":
+		op, err = e.c.UpdateDBAASServiceMysql(ctx, name, v3.UpdateDBAASServiceMysqlRequest{IPFilter: filter})
+	case "valkey":
+		op, err = e.c.UpdateDBAASServiceValkey(ctx, name, v3.UpdateDBAASServiceValkeyRequest{IPFilter: filter})
+	case "opensearch":
+		op, err = e.c.UpdateDBAASServiceOpensearch(ctx, name, v3.UpdateDBAASServiceOpensearchRequest{IPFilter: filter})
+	case "kafka":
+		op, err = e.c.UpdateDBAASServiceKafka(ctx, name, v3.UpdateDBAASServiceKafkaRequest{IPFilter: filter})
+	case "grafana":
+		op, err = e.c.UpdateDBAASServiceGrafana(ctx, name, v3.UpdateDBAASServiceGrafanaRequest{IPFilter: filter})
+	default:
+		return fmt.Errorf("dbaas service %q has unsupported type %q", name, svcType)
+	}
+	if err != nil {
+		return fmt.Errorf("update dbaas %q ip-filter: %w", name, err)
+	}
+	if _, err := e.c.Wait(ctx, op, v3.OperationStateSuccess); err != nil {
+		return fmt.Errorf("wait dbaas ip-filter update: %w", err)
+	}
+	return nil
+}
+
+// hostsFromURI extracts the hostname from a DBaaS connection URI such as
+// "postgres://user:pass@host:port/db?sslmode=require".
+func hostsFromURI(uri string) []string {
+	uri = strings.TrimSpace(uri)
+	if uri == "" {
+		return nil
+	}
+	u, err := url.Parse(uri)
+	if err != nil || u.Hostname() == "" {
+		return nil
+	}
+	return []string{u.Hostname()}
 }

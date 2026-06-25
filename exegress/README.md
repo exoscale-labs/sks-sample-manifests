@@ -129,6 +129,51 @@ EXOSCALE_API_KEY=… EXOSCALE_API_SECRET=… EXOSCALE_ZONE=de-fra-1 \
   EXEGRESS_PN_ID=<private-network-uuid> go run ./cmd/controller
 ```
 
+## Dynamic destinations: FQDN & Exoscale DBaaS
+
+A static CIDR breaks when the destination IP moves. For destinations reachable
+by name (and especially **Exoscale DBaaS**, whose endpoint IP can change on
+failover/maintenance with a short DNS TTL), use the dynamic sources — they're
+additive; plain `destinations:` CIDRs keep the simple static path.
+
+```yaml
+spec:
+  destinationDNS: ["partner-api.example.com"]   # resolved + refreshed (A records)
+  dbaasServices: ["my-pg"]                       # Exoscale DBaaS service by name
+  manageDBaaSIPFilter: true                      # ensure the EIP is in the service ip-filter (add-only)
+  resolveIntervalSeconds: 10                     # poll cadence — match short DBaaS TTLs
+  dnsGraceSeconds: 300                           # keep departed IPs routed while connections drain
+```
+
+How it handles short TTLs (see `deploy/example-egressgateway-dbaas.yaml`):
+- The controller re-resolves every `resolveIntervalSeconds` and routes the
+  **full A-record set**.
+- A **rolling window** (`dnsGraceSeconds`) keeps recently-seen IPs routed after
+  they leave DNS, so connections drain instead of breaking on every rotation.
+- Supported DBaaS types: `pg`, `mysql`, `valkey`, `opensearch`, `kafka`,
+  `grafana`. `manageDBaaSIPFilter` is **add-only** — it never removes existing
+  entries (including `0.0.0.0/0`), so it can't lock anything out; restricting the
+  filter to only the EIP stays a deliberate manual step.
+- Residual race: a brand-new IP that a pod resolves in the seconds before the
+  controller's next poll isn't yet routed. For zero-race needs, route a broad
+  CIDR instead.
+
+**IAM scope:** with DBaaS features the controller's API key additionally needs
+DBaaS read + update (for the ip-filter). Without `dbaasServices`, only
+compute-instance read + private-network read + elastic-IP attach/detach.
+
+## High availability & node eviction
+
+- Run **2 controller replicas** (default) with leader election; they spread
+  across nodes (anti-affinity), so a node eviction lets the standby take over.
+- Node selection is **cordon-aware**: when a node is cordoned/drained (e.g.
+  during an SKS upgrade) the controller proactively moves the EIP to a healthy
+  *schedulable* node **before** the old one is deleted, rather than waiting for
+  it to disappear. If every eligible node is cordoned, it keeps serving on a
+  Ready node.
+- The node agent re-applies its datapath on a timer, so it self-heals after pod
+  restarts, DHCP renewals, or netplan reloads.
+
 ## Validated end-to-end (SKS, de-fra-1, on both Calico and Cilium)
 
 | Test | Result |

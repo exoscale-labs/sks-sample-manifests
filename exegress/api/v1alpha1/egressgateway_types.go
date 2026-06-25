@@ -29,10 +29,34 @@ type Interfaces struct {
 type EgressGatewaySpec struct {
 	// ElasticIP is the pinned EIP to use as the egress source.
 	ElasticIP ElasticIPRef `json:"elasticIP"`
-	// Destinations is the list of CIDRs whose traffic is routed through the
-	// gateway node and SNAT'd to the Elastic IP.
-	// +kubebuilder:validation:MinItems=1
-	Destinations []string `json:"destinations"`
+	// Destinations is the list of static CIDRs whose traffic is routed through
+	// the gateway node and SNAT'd to the Elastic IP. These take the simple,
+	// fully-static path (no DNS, no periodic resolution).
+	// +optional
+	Destinations []string `json:"destinations,omitempty"`
+	// DestinationDNS is a list of hostnames (A records) the controller resolves
+	// and refreshes; their current IPs are routed through the gateway.
+	// +optional
+	DestinationDNS []string `json:"destinationDNS,omitempty"`
+	// DBaaSServices references Exoscale DBaaS services by name. The controller
+	// resolves each service's endpoint host(s) via the DBaaS API, then DNS, and
+	// routes the resulting IPs through the gateway.
+	// +optional
+	DBaaSServices []string `json:"dbaasServices,omitempty"`
+	// ManageDBaaSIPFilter, when true, ensures the Elastic IP is present in the
+	// ip-filter of each referenced DBaaS service. Add-only: existing entries
+	// (including 0.0.0.0/0) are never removed.
+	// +optional
+	ManageDBaaSIPFilter bool `json:"manageDBaaSIPFilter,omitempty"`
+	// ResolveIntervalSeconds is how often DNS/DBaaS destinations are refreshed.
+	// Ignored when only static Destinations are set. Defaults to 30.
+	// +optional
+	ResolveIntervalSeconds int `json:"resolveIntervalSeconds,omitempty"`
+	// DNSGraceSeconds keeps a resolved IP routed this long after it stops
+	// appearing in DNS (rolling window for short-TTL / failover churn).
+	// Defaults to 300.
+	// +optional
+	DNSGraceSeconds int `json:"dnsGraceSeconds,omitempty"`
 	// GatewayNodeSelector selects nodes eligible to host the Elastic IP.
 	GatewayNodeSelector metav1.LabelSelector `json:"gatewayNodeSelector"`
 	// Interfaces optionally overrides node interface names.
@@ -51,6 +75,9 @@ type EgressGatewayStatus struct {
 	// EIPAttached reports whether the EIP is attached to the active node.
 	// +optional
 	EIPAttached bool `json:"eipAttached,omitempty"`
+	// ResolvedDestinations is the current routed CIDR set (static + resolved).
+	// +optional
+	ResolvedDestinations []string `json:"resolvedDestinations,omitempty"`
 	// ObservedGeneration is the spec generation last reconciled.
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
