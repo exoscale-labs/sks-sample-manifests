@@ -183,6 +183,9 @@ compute-instance read + private-network read + elastic-IP attach/detach.
 | Failover (`stop` active node) | controller moved the EIP to the other node in seconds; egress still returned the same EIP |
 | Stickiness | recovered node did not trigger fail-back (no flapping) |
 | Controller **in-cluster** (GHCR image + leader election) | acquired the lease, reconciled, and performed the same node-stop failover while running as a Deployment |
+| **DBaaS (B) + ip-filter** | controller resolved a real Exoscale Postgres endpoint, locked its ip-filter to the EIP, and a pod then connected to PG — proving egress via the EIP |
+| **FQDN (A) rolling window** | DBaaS/FQDN IPs resolved + refreshed into the routed set; departed IPs drain over `dnsGraceSeconds` |
+| **Cordon-aware eviction** | cordoning the active gateway moved the EIP to a schedulable node within ~20s, before any deletion |
 
 ## Status / roadmap
 
