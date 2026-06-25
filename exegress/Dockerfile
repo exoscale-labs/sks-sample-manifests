@@ -1,7 +1,7 @@
 # Build the exegress controller as a static binary on a distroless base.
 # GOTOOLCHAIN=auto lets the build fetch the toolchain required by go.mod
 # (the k8s deps pin a newer Go than the base image ships).
-FROM golang:1.25 AS build
+FROM --platform=$BUILDPLATFORM golang:1.25 AS build
 ENV GOTOOLCHAIN=auto
 WORKDIR /src
 COPY go.mod go.sum ./
