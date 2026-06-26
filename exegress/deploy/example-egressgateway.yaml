@@ -6,8 +6,10 @@ spec:
   elasticIP:
     id: "REPLACE_WITH_EIP_UUID"
     address: "REPLACE_WITH_EIP_ADDRESS"
-  destinations:
-    - "192.0.2.25/32" # e.g. the A1 mail relay
+  destinations: # any number of CIDRs — single IPs (/32) and subnets both work
+    - "192.0.2.25/32"    # a single host, e.g. the mail relay
+    - "203.0.113.10/32"  # another single host
+    - "198.51.100.0/24"  # a whole subnet — all traffic to it exits via the EIP
   gatewayNodeSelector:
     matchLabels:
       exegress.io/eligible: "true"

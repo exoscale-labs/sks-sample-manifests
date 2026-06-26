@@ -107,8 +107,9 @@ spec:
   elasticIP:
     id: "<elastic-ip-uuid>"
     address: "<elastic-ip-address>"
-  destinations:
-    - "192.0.2.25/32"          # e.g. the partner mail relay
+  destinations:                # list any number of CIDRs (single IPs and subnets)
+    - "192.0.2.25/32"          # a single host, e.g. the partner mail relay
+    - "198.51.100.0/24"        # a whole subnet
   gatewayNodeSelector:
     matchLabels:
       exegress.io/eligible: "true"
