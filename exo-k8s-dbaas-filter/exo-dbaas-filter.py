@@ -14,8 +14,7 @@ import os
 import sys
 import time
 import logging
-from typing import List, Set, Dict
-from datetime import datetime
+from typing import List, Set, Dict, Optional
 
 try:
     import requests
@@ -205,7 +204,7 @@ class ExoscaleAPI:
 # Main Logic
 # ============================================================================
 
-def get_cluster_ips(api: ExoscaleAPI, cluster_name: str, zone: str) -> Set[str]:
+def get_cluster_ips(api: ExoscaleAPI, cluster_name: str, zone: str) -> Optional[Set[str]]:
     """Get all node IPs from an SKS cluster."""
     ips = set()
 
@@ -219,9 +218,9 @@ def get_cluster_ips(api: ExoscaleAPI, cluster_name: str, zone: str) -> Set[str]:
                 break
 
         if not cluster:
-            logger.warning(
+            logger.error(
                 f"  Cluster '{cluster_name}' not found in zone {zone}")
-            return ips
+            return None
 
         cluster_id = cluster['id']
 
@@ -265,11 +264,12 @@ def get_cluster_ips(api: ExoscaleAPI, cluster_name: str, zone: str) -> Set[str]:
 
     except requests.exceptions.RequestException as e:
         logger.error(f"  Error querying cluster {cluster_name}: {e}")
+        return None
 
     return ips
 
 
-def gather_all_ips(api: ExoscaleAPI, clusters: List[Dict], static_ips: List[str]) -> Set[str]:
+def gather_all_ips(api: ExoscaleAPI, clusters: List[Dict], static_ips: List[str]) -> Optional[Set[str]]:
     """Gather IPs from all clusters and add static IPs."""
     all_ips = set()
 
@@ -281,6 +281,10 @@ def gather_all_ips(api: ExoscaleAPI, clusters: List[Dict], static_ips: List[str]
         logger.info(f"  Querying cluster: {cluster_name} (zone: {zone})")
 
         cluster_ips = get_cluster_ips(api, cluster_name, zone)
+        if cluster_ips is None:
+            logger.error("  Cluster inventory incomplete. Skipping DBaaS update.")
+            return None
+
         all_ips.update(cluster_ips)
 
     # Add static IPs
@@ -332,7 +336,9 @@ def main():
             )
 
             # Check if IPs changed
-            if current_ips != previous_ips:
+            if current_ips is None:
+                logger.error("Keeping existing DBaaS IP filter.")
+            elif current_ips != previous_ips:
                 if not current_ips:
                     logger.error("No IPs found! Skipping update.")
                 else:
