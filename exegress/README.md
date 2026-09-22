@@ -153,7 +153,7 @@ How it handles short TTLs (see `deploy/example-egressgateway-dbaas.yaml`):
   they leave DNS, so connections drain instead of breaking on every rotation.
 - Supported DBaaS types: `pg`, `mysql`, `valkey`, `opensearch`, `kafka`,
   `grafana`.
-- `manageDBaaSIPFilter` is **add-only** — it adds the EIP and never removes
+- `manageDBaaSIPFilter` is **add-only**: it adds the EIP and never removes
   existing entries, so enabling it cannot take access away from anything that
   has it. An empty DBaaS `ip-filter` accepts nothing, so on a service that has
   no filter yet this grants access to the EIP and to nothing else. Conversely,

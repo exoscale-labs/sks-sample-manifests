@@ -196,7 +196,7 @@ class DegeneratePayloadTest(unittest.TestCase):
         self.assertFalse(inventory(api).complete)
 
     def test_short_instance_list_holds(self):
-        """size says 3, the pool returns 2 — an incomplete answer."""
+        """size says 3, the pool returns 2, an incomplete answer."""
         api = healthy(3)
         api.pools["pool-1"]["instances"].pop()
 

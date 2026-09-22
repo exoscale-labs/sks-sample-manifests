@@ -1,5 +1,12 @@
 # DBaaS IP Filter Automation for SKS
 
+> **Sample, not a supported product.** Provided as-is and not covered by the
+> Exoscale SLA, see [Service level and support](https://community.exoscale.com/documentation/sks/overview/#service-level-and-support).
+> Issues and pull requests are welcome without any commitment to resolve them.
+> Read the code, pin the image version rather than tracking `latest`, and
+> validate with `DRY_RUN` before relying on it. See the [repository README](../README.md)
+> for what to expect from this repository.
+
 Automatically maintain DBaaS IP firewall rules by monitoring SKS cluster node IPs.
 
 **Features:**
@@ -227,7 +234,7 @@ Images are built automatically via GitHub Actions:
 - Can be manually triggered
 
 **Pin a version in production.** The `latest` tag moves, so a Deployment using it
-gets a different build over time — and if `imagePullPolicy` is set to `IfNotPresent`,
+gets a different build over time, and if `imagePullPolicy` is set to `IfNotPresent`,
 a node that already cached a `latest` image never pulls a newer one, keeping the
 Deployment on an old build indefinitely. Either pin an immutable tag:
 
@@ -295,14 +302,15 @@ trusted.
 
 The check for an empty result is made on the node IPs **before** `STATIC_IPS` are
 added. Merging them first is what turns an empty inventory into a plausible-looking
-result and replaces the filter with the static entries alone — the failure this tool
+result and replaces the filter with the static entries alone, the failure this tool
 exists to avoid. As a consequence, a cluster that genuinely has no nodes leaves the
 filter unchanged rather than reducing it to the static entries.
 
 ### With more than one cluster
 
 The IP filter is a single list built from every configured cluster, so a cluster that
-cannot be inventoried cannot simply be left out — doing so would drop its nodes.
+cannot be inventoried cannot simply be left out, because doing so would drop its
+nodes.
 
 Instead, a cycle in which **any** cluster fails to reconcile switches to adding only:
 the addresses that were verified are merged into the filter as it currently stands, and
@@ -312,9 +320,9 @@ inventory can be established again.
 
 Removals are applied only on a cycle where *every* configured cluster reconciled.
 
-One consequence worth knowing: a cluster that is permanently unreconcilable — deleted
+One consequence worth knowing: a cluster that is permanently unreconcilable (deleted
 but still listed in `SKS_CLUSTERS`, or a nodepool stuck in `error` with a `size` that no
-longer matches reality — keeps the whole configuration in add-only mode indefinitely.
+longer matches reality) keeps the whole configuration in add-only mode indefinitely.
 The repeating `ERROR` line names the cluster.
 
 That matters beyond convenience. While add-only mode lasts, every node replacement in a
@@ -346,7 +354,7 @@ Because a failed cycle changes nothing, the next cycle simply retries.
 
 Each cycle compares the desired list against what every service actually reports, and
 writes only where they differ. No "last applied" state is kept, which matters because
-the update API accepts a change and applies it asynchronously — an `HTTP 200` is not
+the update API accepts a change and applies it asynchronously, so an `HTTP 200` is not
 proof that the filter took effect. Re-reading it every cycle means a write that silently
 failed, or a filter changed by someone else, is corrected on the next pass instead of
 being assumed good.
@@ -426,7 +434,7 @@ docker build -t dbaas-ip-filter .
 python3 -m unittest test_exo_dbaas_filter -v
 ```
 
-They need no dependencies and no credentials — `requests` and `exoscale_auth` are
+They need no dependencies and no credentials: `requests` and `exoscale_auth` are
 stubbed. Most of the suite asserts that malformed or incomplete API responses leave the
 IP filter untouched; extend it whenever a new failure mode is found.
 
