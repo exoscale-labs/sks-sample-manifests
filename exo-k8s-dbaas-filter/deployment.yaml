@@ -17,7 +17,10 @@ data:
   # Supported types: pg, mysql, kafka, opensearch, valkey, grafana
   dbaas-services: "my-postgres-db:ch-gva-2:pg"
 
-  # Optional: Static IPs to always include (CIDR format)
+  # Optional: Static IPs to always include (CIDR format).
+  # These are added to the node IPs, they never stand in for them: if the node
+  # inventory cannot be established, no entry is removed and the filter is never
+  # reduced to these entries alone.
   static-ips: ""  # Example: "192.168.1.1/32,10.0.0.0/24"
 
   # Check interval in seconds (default: 10)
@@ -25,6 +28,16 @@ data:
 
   # Log level: DEBUG, INFO, WARNING, ERROR (default: INFO)
   log-level: "INFO"
+
+  # Log the intended changes without applying them. Useful for validating a new
+  # version against a real cluster before letting it write.
+  dry-run: "false"
+
+  # Retries per API request, after the initial attempt (default: 3)
+  max-retries: "3"
+
+  # Per-request timeout in seconds (default: 30)
+  request-timeout: "30"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -45,8 +58,11 @@ spec:
     spec:
       containers:
       - name: exo-dbaas-filter
+        # Pin an immutable tag or digest in production. With the ":latest" tag,
+        # "IfNotPresent" would keep a node on whatever image it cached first, so
+        # the Deployment silently never picks up a new version.
         image: ghcr.io/exoscale-labs/dbaas-ip-filter:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         resources:
           requests:
             cpu: 50m
@@ -90,3 +106,21 @@ spec:
               configMapKeyRef:
                 name: dbaas-filter-config
                 key: log-level
+          - name: DRY_RUN
+            valueFrom:
+              configMapKeyRef:
+                name: dbaas-filter-config
+                key: dry-run
+                optional: true
+          - name: MAX_RETRIES
+            valueFrom:
+              configMapKeyRef:
+                name: dbaas-filter-config
+                key: max-retries
+                optional: true
+          - name: REQUEST_TIMEOUT
+            valueFrom:
+              configMapKeyRef:
+                name: dbaas-filter-config
+                key: request-timeout
+                optional: true

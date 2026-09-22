@@ -5,7 +5,7 @@
       "type": "rules",
       "rules": [
         {
-          "expression": "operation in ['list-dbaas-services', 'get-dbaas-service-pg', 'get-dbaas-service-mysql', 'get-dbaas-service-kafka', 'get-dbaas-service-opensearch', 'get-dbaas-service-valkey', 'get-dbaas-service-grafana', 'get-dbaas-settings-pg', 'get-dbaas-settings-mysql', 'get-dbaas-settings-kafka', 'get-dbaas-settings-opensearch', 'get-dbaas-settings-valkey', 'get-dbaas-settings-grafana']",
+          "expression": "operation in ['get-dbaas-service-pg', 'get-dbaas-service-mysql', 'get-dbaas-service-kafka', 'get-dbaas-service-opensearch', 'get-dbaas-service-valkey', 'get-dbaas-service-grafana']",
           "action": "allow"
         },
         {
@@ -18,7 +18,7 @@
       "type": "rules",
       "rules": [
         {
-          "expression": "operation in ['list-zones', 'list-sks-clusters', 'get-sks-cluster', 'get-instance-pool', 'get-instance']",
+          "expression": "operation in ['list-sks-clusters', 'get-instance-pool', 'get-instance']",
           "action": "allow"
         }
       ]
