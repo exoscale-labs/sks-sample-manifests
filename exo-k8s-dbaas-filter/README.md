@@ -218,12 +218,12 @@ exo iam api-key create dbaas-filter-key --role dbaas-filter-role
 Pre-built multi-architecture container images are automatically published to GitHub Container Registry:
 
 - **Latest**: `ghcr.io/exoscale-labs/dbaas-ip-filter:latest`
-- **Versioned**: `ghcr.io/exoscale-labs/dbaas-ip-filter:1.0.0`
+- **Versioned**: `ghcr.io/exoscale-labs/dbaas-ip-filter:0.1.0`
 - **Architectures**: `linux/amd64`, `linux/arm64`
 
 Images are built automatically via GitHub Actions:
 - On every push to main branch (when `exo-k8s-dbaas-filter/` changes) → `latest` tag
-- On git tags matching `dbaas-filter-v*` → versioned tags (e.g., `dbaas-filter-v1.0.0` → `1.0.0`)
+- On git tags matching `dbaas-filter-v*` → versioned tags (e.g., `dbaas-filter-v0.1.0` → `0.1.0`)
 - Can be manually triggered
 
 **Pin a version in production.** The `latest` tag moves, so a Deployment using it
@@ -232,7 +232,7 @@ a node that already cached a `latest` image never pulls a newer one, keeping the
 Deployment on an old build indefinitely. Either pin an immutable tag:
 
 ```yaml
-image: ghcr.io/exoscale-labs/dbaas-ip-filter:1.0.0
+image: ghcr.io/exoscale-labs/dbaas-ip-filter:0.1.0
 imagePullPolicy: IfNotPresent
 ```
 
@@ -247,8 +247,8 @@ kubectl get pods -n exoscale-automation \
 
 **Creating a versioned release:**
 ```bash
-git tag dbaas-filter-v1.0.0
-git push origin dbaas-filter-v1.0.0
+git tag dbaas-filter-v0.1.0
+git push origin dbaas-filter-v0.1.0
 ```
 
 ## How It Works
