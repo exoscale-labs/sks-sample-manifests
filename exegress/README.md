@@ -154,13 +154,13 @@ How it handles short TTLs (see `deploy/example-egressgateway-dbaas.yaml`):
 - Supported DBaaS types: `pg`, `mysql`, `valkey`, `opensearch`, `kafka`,
   `grafana`.
 - `manageDBaaSIPFilter` is **add-only** — it adds the EIP and never removes
-  existing entries. **Important:** an *empty* DBaaS `ip-filter` means
-  allow-all; adding the EIP to it switches the service to **allow-list mode**,
-  i.e. it now accepts connections *only* from the listed entries. That is the
-  intended lockdown for "DB reachable only via the EIP", but it means enabling
-  this on an open service **will restrict it** — make sure every other source
-  that must reach the DB is already in the filter (or add it) before turning
-  this on. The controller will not add `0.0.0.0/0` for you.
+  existing entries, so enabling it cannot take access away from anything that
+  has it. An empty DBaaS `ip-filter` accepts nothing, so on a service that has
+  no filter yet this grants access to the EIP and to nothing else. Conversely,
+  if the service is reachable through an explicit `0.0.0.0/0` entry, that entry
+  stays and the service stays open: **this will not lock it down for you.** To
+  get "DB reachable only via the EIP", remove `0.0.0.0/0` yourself once the EIP
+  is in the list. The controller never adds `0.0.0.0/0`.
 - Residual race: a brand-new IP that a pod resolves in the seconds before the
   controller's next poll isn't yet routed. For zero-race needs, route a broad
   CIDR instead.
