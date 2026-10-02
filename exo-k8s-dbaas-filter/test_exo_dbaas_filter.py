@@ -1026,6 +1026,45 @@ class KarpenterDiscoveryTest(unittest.TestCase):
         self.assertTrue(result.complete)
         self.assertEqual(result.node_ips, {"198.51.100.77/32"})
 
+    def test_mixed_karpenter_and_plain_clusters(self):
+        """One cluster with the addon, one without, in the same configuration."""
+        a = healthy(2, pool_id="pool-a", name=CLUSTER, first_octet=10, id_prefix="a")
+        a.clusters[0]["addons"] = ["karpenter"]
+        b = healthy(2, pool_id="pool-b", name=OTHER, first_octet=20, id_prefix="b")
+
+        api = FakeAPI(clusters=a.clusters + b.clusters,
+                      pools={**a.pools, **b.pools},
+                      instances={**a.instances, **b.instances},
+                      zone_instances=[karpenter_node("198.51.100.77",
+                                                     cluster_id="id-" + CLUSTER)])
+
+        result = inventory(api, BOTH)
+
+        self.assertTrue(result.complete)
+        self.assertEqual(
+            result.node_ips,
+            expected_ips(2, 10) | expected_ips(2, 20) | {"198.51.100.77/32"})
+        self.assertEqual(api.list_instances_calls, 1,
+                         "instances listed once, for the karpenter cluster only")
+
+    def test_mixed_clusters_karpenter_lookup_failure_is_contained(self):
+        """A 403 on the Karpenter cluster must not discard the plain one."""
+        a = healthy(2, pool_id="pool-a", name=CLUSTER, first_octet=10, id_prefix="a")
+        a.clusters[0]["addons"] = ["karpenter"]
+        b = healthy(2, pool_id="pool-b", name=OTHER, first_octet=20, id_prefix="b")
+
+        api = FakeAPI(clusters=a.clusters + b.clusters,
+                      pools={**a.pools, **b.pools},
+                      instances={**a.instances, **b.instances},
+                      zone_instances=RequestException("403 Forbidden"))
+
+        result = inventory(api, BOTH)
+
+        self.assertFalse(result.complete)
+        self.assertEqual(result.node_ips, expected_ips(2, 20),
+                         "the plain cluster's nodes stay usable as additions")
+
+
 
 if __name__ == "__main__":
     unittest.main()
