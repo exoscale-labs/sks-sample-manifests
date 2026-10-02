@@ -173,7 +173,9 @@ data:
 This script uses direct Exoscale APIv2 calls and requires minimal permissions compared to exo CLI-based solutions.
 
 **Required permissions:**
-- **Compute**: 3 operations (list-sks-clusters, get-instance-pool, get-instance)
+- **Compute**: 4 operations (list-sks-clusters, get-instance-pool, get-instance, list-instances)
+  `list-instances` is only used on clusters running the `karpenter` addon. Without it,
+  a Karpenter cluster's inventory can never be completed and no entry is ever removed.
 - **DBaaS**: Get and update operations for your database types
 
 Create an IAM role with this policy (`dbaas-filter-policy.json`):
@@ -199,7 +201,7 @@ Create an IAM role with this policy (`dbaas-filter-policy.json`):
       "type": "rules",
       "rules": [
         {
-          "expression": "operation in ['list-sks-clusters', 'get-instance-pool', 'get-instance']",
+          "expression": "operation in ['list-sks-clusters', 'get-instance-pool', 'get-instance', 'list-instances']",
           "action": "allow"
         }
       ]
@@ -374,11 +376,27 @@ added by hand through the portal, by Terraform, or by any other tool **are remov
 the next update**. Add permanent extra entries to `STATIC_IPS` instead, so they are
 included in every write.
 
-### Scope
+### Karpenter
 
-Only nodes belonging to SKS nodepools are discovered. Clusters using the `karpenter`
-addon provision instances outside of nodepools; those nodes are not seen by this
-script and will not be added to the IP filter.
+Karpenter nodes belong to no nodepool and no instance pool, so the nodepool walk
+cannot see them. They are discovered separately, by their Exoscale instance labels:
+
+```
+exoscale.com/cluster-id:  <the cluster's id>
+exoscale.com/managed-by:  karpenter
+```
+
+Only clusters whose `addons` list contains `karpenter` are scanned this way, so a
+configuration that does not use Karpenter makes no extra API call and does not need
+the `list-instances` permission.
+
+One difference is worth knowing. A nodepool declares how many instances it should
+have, so the addresses collected from it are reconciled against that number and a
+short answer is rejected. Karpenter declares no such number, so there is nothing to
+reconcile its node count against. That portion is a single list call, which is why it
+is trusted, but it is not verified the way the nodepool portion is. Everything else
+still applies: a failed or malformed list makes the cycle add-only, and no entry is
+removed on an inventory that could not be established.
 
 ## Troubleshooting
 

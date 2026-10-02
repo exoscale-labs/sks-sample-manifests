@@ -72,10 +72,13 @@ CLUSTER = "prod"
 class FakeAPI:
     """Duck-typed stand-in for ExoscaleAPI."""
 
-    def __init__(self, clusters=None, pools=None, instances=None):
+    def __init__(self, clusters=None, pools=None, instances=None,
+                 zone_instances=None):
         self.clusters = [] if clusters is None else clusters
         self.pools = pools or {}
         self.instances = instances or {}
+        self.zone_instances = zone_instances
+        self.list_instances_calls = 0
 
     def get_sks_clusters(self, zone):
         if isinstance(self.clusters, Exception):
@@ -93,6 +96,12 @@ class FakeAPI:
         if isinstance(value, Exception):
             raise value
         return value
+
+    def list_instances(self, zone):
+        self.list_instances_calls += 1
+        if isinstance(self.zone_instances, Exception):
+            raise self.zone_instances
+        return self.zone_instances
 
 
 def healthy(node_count=2, pool_id="pool-1", name=None,
@@ -884,6 +893,138 @@ class RunCycleMultiClusterTest(unittest.TestCase):
 
         self.assertFalse(ok)
         self.assertEqual(dbaas.writes, [])
+
+
+# ---------------------------------------------------------------------------
+# Karpenter provisioned nodes
+# ---------------------------------------------------------------------------
+
+CLUSTER_ID = "id-" + CLUSTER
+CL = dbaas_filter.KARPENTER_CLUSTER_LABEL
+MB = dbaas_filter.KARPENTER_MANAGED_LABEL
+
+
+def karpenter_node(ip, cluster_id=CLUSTER_ID, name="k-standard-aaaaa", **over):
+    node = {
+        "id": "ki-" + name,
+        "name": name,
+        "state": "running",
+        "public-ip": ip,
+        "manager": {},
+        "labels": {
+            CL: cluster_id,
+            MB: "karpenter",
+            "exoscale.com/nodepool-name": "standard",
+        },
+    }
+    node.update(over)
+    return node
+
+
+def with_karpenter(node_count=2, zone_instances=None):
+    """A cluster carrying the karpenter addon, plus the zone's instance list."""
+    api = healthy(node_count)
+    api.clusters[0]["addons"] = ["exoscale-cloud-controller", "karpenter"]
+    api.zone_instances = [] if zone_instances is None else zone_instances
+    return api
+
+
+class KarpenterDiscoveryTest(unittest.TestCase):
+
+    def test_karpenter_nodes_are_included(self):
+        api = with_karpenter(2, [karpenter_node("198.51.100.77")])
+
+        result = inventory(api)
+
+        self.assertTrue(result.complete)
+        self.assertEqual(result.node_ips,
+                         expected_ips(2) | {"198.51.100.77/32"})
+
+    def test_nodepool_reconciliation_is_unaffected_by_karpenter_nodes(self):
+        """The node count check must apply to the nodepool portion only."""
+        api = with_karpenter(2, [karpenter_node("198.51.100.77"),
+                                 karpenter_node("198.51.100.78",
+                                                name="k-standard-bbbbb")])
+
+        result = inventory(api)
+
+        self.assertTrue(result.complete)
+        self.assertEqual(len(result.node_ips), 4)
+
+    def test_instances_are_not_listed_without_the_addon(self):
+        """No addon means no extra call and no list-instances IAM permission."""
+        api = healthy(2)
+        api.zone_instances = [karpenter_node("198.51.100.77")]
+
+        result = inventory(api)
+
+        self.assertEqual(api.list_instances_calls, 0)
+        self.assertEqual(result.node_ips, expected_ips(2))
+
+    def test_another_clusters_karpenter_nodes_are_ignored(self):
+        api = with_karpenter(2, [karpenter_node("198.51.100.77",
+                                                cluster_id="id-someone-else")])
+
+        self.assertEqual(inventory(api).node_ips, expected_ips(2))
+
+    def test_unlabelled_instances_are_ignored(self):
+        """An unrelated VM in the account must never reach the filter."""
+        api = with_karpenter(2, [
+            {"id": "x", "name": "win2019", "state": "running",
+             "public-ip": "203.0.113.200", "labels": {}},
+        ])
+
+        self.assertEqual(inventory(api).node_ips, expected_ips(2))
+
+    def test_instance_labelled_for_the_cluster_but_not_karpenter_is_ignored(self):
+        api = with_karpenter(2, [karpenter_node(
+            "198.51.100.77", **{"labels": {CL: CLUSTER_ID, MB: "something"}})])
+
+        self.assertEqual(inventory(api).node_ips, expected_ips(2))
+
+    def test_karpenter_node_without_public_ip_holds(self):
+        node = karpenter_node("198.51.100.77")
+        del node["public-ip"]
+        api = with_karpenter(2, [node])
+
+        self.assertFalse(inventory(api).complete)
+
+    def test_karpenter_node_with_unparseable_ip_holds(self):
+        api = with_karpenter(2, [karpenter_node("not-an-ip")])
+
+        self.assertFalse(inventory(api).complete)
+
+    def test_missing_instances_key_holds(self):
+        api = with_karpenter(2)
+        api.zone_instances = None
+
+        self.assertFalse(inventory(api).complete)
+
+    def test_instance_list_failure_holds(self):
+        """A 403 from a policy without list-instances must not look like
+        a cluster with no Karpenter nodes."""
+        api = with_karpenter(2)
+        api.zone_instances = RequestException("403 Forbidden")
+
+        self.assertFalse(inventory(api).complete)
+
+    def test_no_karpenter_nodes_yet_is_fine(self):
+        api = with_karpenter(2, [])
+
+        result = inventory(api)
+
+        self.assertTrue(result.complete)
+        self.assertEqual(result.node_ips, expected_ips(2))
+
+    def test_karpenter_only_cluster(self):
+        """A nodepool scaled to zero with Karpenter carrying the whole cluster."""
+        api = with_karpenter(2, [karpenter_node("198.51.100.77")])
+        api.clusters[0]["nodepools"] = []
+
+        result = inventory(api)
+
+        self.assertTrue(result.complete)
+        self.assertEqual(result.node_ips, {"198.51.100.77/32"})
 
 
 if __name__ == "__main__":

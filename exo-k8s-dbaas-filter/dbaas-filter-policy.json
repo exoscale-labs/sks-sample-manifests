@@ -18,7 +18,7 @@
       "type": "rules",
       "rules": [
         {
-          "expression": "operation in ['list-sks-clusters', 'get-instance-pool', 'get-instance']",
+          "expression": "operation in ['list-sks-clusters', 'get-instance-pool', 'get-instance', 'list-instances']",
           "action": "allow"
         }
       ]

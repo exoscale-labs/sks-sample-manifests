@@ -60,6 +60,13 @@ DBAAS_TYPES = {
 
 RETRY_STATUSES = (429, 500, 502, 503, 504)
 
+# Labels Exoscale puts on instances that Karpenter provisions. They are the only
+# way to tie such an instance back to its cluster: Karpenter nodes belong to no
+# nodepool and no instance pool, so the nodepool walk cannot see them.
+KARPENTER_CLUSTER_LABEL = 'exoscale.com/cluster-id'
+KARPENTER_MANAGED_LABEL = 'exoscale.com/managed-by'
+KARPENTER_MANAGED_VALUE = 'karpenter'
+
 
 class Inventory(NamedTuple):
     """The node addresses gathered in one pass over the configured clusters.
@@ -233,6 +240,15 @@ class ExoscaleAPI:
         """Get instance details."""
         return self._get(zone, f'/instance/{instance_id}')
 
+    def list_instances(self, zone: str) -> Optional[List[Dict]]:
+        """List every instance in a zone, with labels, state and public IP.
+
+        Server side label filtering is not usable here: `labels[key]=value` is
+        ignored and `labels={...}` matches nothing, so the filtering is done by
+        the caller.
+        """
+        return self._get(zone, '/instance').get('instances')
+
     def get_dbaas_ip_filter(self, db_name: str, db_type: str,
                             zone: str) -> Optional[List[str]]:
         """Return the IP filter currently set on a DBaaS service."""
@@ -349,6 +365,49 @@ def _nodepool_ips(api: ExoscaleAPI, nodepool: Dict,
     return ips
 
 
+def _karpenter_ips(api: ExoscaleAPI, cluster_id: str, cluster_name: str,
+                   zone: str) -> Optional[Set[str]]:
+    """Public IPs of the Karpenter provisioned nodes of one cluster.
+
+    Unlike a nodepool, Karpenter does not declare how many nodes there should
+    be, so this count cannot be reconciled against anything. It is a single list
+    call rather than the multi-step walk a nodepool needs, which is the reason
+    to trust it, not a proof that it is complete.
+    """
+    instances = api.list_instances(zone)
+    if instances is None:
+        logger.error(f"  Cluster '{cluster_name}': instance list returned no "
+                     f"'instances' field")
+        return None
+
+    ips = set()
+    for instance in instances:
+        labels = instance.get('labels') or {}
+        if labels.get(KARPENTER_CLUSTER_LABEL) != cluster_id:
+            continue
+        if labels.get(KARPENTER_MANAGED_LABEL) != KARPENTER_MANAGED_VALUE:
+            continue
+
+        name = instance.get('name', instance.get('id', 'unknown'))
+        ip_address = instance.get('public-ip')
+        if not ip_address:
+            logger.error(f"    Karpenter node {name} has no public-ip")
+            return None
+
+        try:
+            parsed = ipaddress.IPv4Address(str(ip_address).strip())
+        except ValueError:
+            logger.error(f"    Karpenter node {name} reported an unusable "
+                         f"public-ip '{ip_address}'")
+            return None
+
+        ips.add(f"{parsed}/32")
+        logger.info(f"    Found IP: {parsed} (karpenter node: {name}, "
+                    f"state: {instance.get('state', 'unknown')})")
+
+    return ips
+
+
 def get_cluster_ips(api: ExoscaleAPI, cluster_name: str,
                     zone: str) -> Optional[Set[str]]:
     """Get all node IPs from an SKS cluster, or None if the inventory is incomplete.
@@ -400,6 +459,18 @@ def get_cluster_ips(api: ExoscaleAPI, cluster_name: str,
             logger.error(f"  Cluster '{cluster_name}': collected {len(ips)} "
                          f"unique IP(s) for {expected} expected node(s)")
             return None
+
+        # Only clusters running the addon are scanned, so a configuration that
+        # does not use Karpenter needs neither the extra call nor the
+        # list-instances IAM permission.
+        if KARPENTER_MANAGED_VALUE in (cluster.get('addons') or []):
+            karpenter_ips = _karpenter_ips(
+                api, cluster['id'], cluster_name, zone)
+            if karpenter_ips is None:
+                logger.error(
+                    f"  Incomplete inventory for cluster '{cluster_name}'")
+                return None
+            ips |= karpenter_ips
 
         return ips
 
