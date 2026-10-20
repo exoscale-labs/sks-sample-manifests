@@ -1,0 +1,51 @@
+# Values for the nfs-server-provisioner Helm chart, version 1.8.0:
+# https://github.com/kubernetes-sigs/nfs-ganesha-server-and-external-provisioner
+#
+# helm install nfs nfs-ganesha/nfs-server-provisioner --version 1.8.0 \
+#   --namespace nfs --create-namespace -f values.yaml
+
+# Our build of the server (see image/Dockerfile). The chart's default image
+# runs a Ganesha that breaks directory listings on current SKS nodes.
+image:
+  repository: ghcr.io/exoscale-labs/nfs-rwx
+  tag: "0.1.0"
+
+# All exported data lives on one Exoscale block storage volume. Size it for
+# everything the RWX volumes will hold together: per-volume sizes are not
+# enforced. To grow it later, resize the claim as described in the README;
+# do not change this value after install, Helm cannot apply it.
+persistence:
+  enabled: true
+  storageClass: exoscale-sbs
+  accessMode: ReadWriteOnce
+  size: 100Gi
+
+storageClass:
+  create: true
+  name: nfs
+  defaultClass: false
+  # The provisioner cannot resize the directories it hands out.
+  allowVolumeExpansion: false
+  reclaimPolicy: Delete
+  mountOptions:
+    # NFSv4.1 carries file locking in the protocol itself, which DuckDB and
+    # SQLite rely on.
+    - vers=4.1
+    # Block and retry while the server is away (restart, node move) instead
+    # of returning I/O errors to the application.
+    - hard
+    - timeo=600
+    - retrans=2
+
+# After every start, Ganesha waits this long for clients to reclaim their
+# locks before it accepts new ones; client I/O stalls for about this long.
+# Lower it only if you accept that a slow client can lose its locks.
+# extraArgs:
+#   grace-period: 90
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi

@@ -35,6 +35,7 @@ before you run it, and test it against your own cluster before it matters.
 | [`exo-k8s-dbaas-filter`](exo-k8s-dbaas-filter/) | Keeps a DBaaS `ip-filter` in sync with the public IPs of your SKS nodes | Unit tested, validated against a live cluster and database |
 | [`exegress`](exegress/) | Kubernetes controller giving SKS a stable, highly available egress source IP via a pinned Elastic IP | Proof of concept, limited real world testing, no security review |
 | [`exo-kubectl`](exo-kubectl/) | Small container image bundling Helm, kubectl and the Exoscale CLI | Utility image, stable in scope |
+| [`nfs-rwx`](nfs-rwx/) | ReadWriteMany volumes with one `kubectl apply`: an NFS-Ganesha server on Exoscale block storage, with automatic recovery from node crashes | Validated against a live cluster: restarts, drains, node crash, resize, DuckDB locking |
 
 The maturity column says how much the code has been exercised. It does not
 change the support position above, which is the same for all of them.

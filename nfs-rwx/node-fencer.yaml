@@ -1,0 +1,88 @@
+# Applies node.kubernetes.io/out-of-service to nodes whose VM Exoscale reports
+# as stopped, so the NFS server is restarted on another node without anyone
+# having to step in. See image/node-fencer.sh for the exact rules.
+#
+# Included in install.yaml. With Helm, apply it separately:
+#   kubectl apply -f node-fencer.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: node-fencer
+  namespace: nfs
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nfs-rwx-node-fencer
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nfs-rwx-node-fencer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nfs-rwx-node-fencer
+subjects:
+  - kind: ServiceAccount
+    name: node-fencer
+    namespace: nfs
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-fencer
+  namespace: nfs
+spec:
+  # Two copies on different nodes, so the node that dies cannot take the only
+  # copy with it. Both act on the same rules; tainting twice is harmless.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: node-fencer
+  template:
+    metadata:
+      labels:
+        app: node-fencer
+    spec:
+      serviceAccountName: node-fencer
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: node-fencer
+      containers:
+        - name: node-fencer
+          image: ghcr.io/exoscale-labs/nfs-rwx:0.1.0
+          command: ["/node-fencer.sh"]
+          env:
+            # Seconds a node must stay shut down before it is fenced.
+            - name: SHUTDOWN_FOR
+              value: "60"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,54 @@
+# One ReadWriteMany volume mounted by three pods, one per node.
+# Each pod appends a line to its own file every 5 seconds and lists the files
+# the other pods wrote.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shared
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: nfs
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rwx-smoke-test
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: rwx-smoke-test
+  template:
+    metadata:
+      labels:
+        app: rwx-smoke-test
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: rwx-smoke-test
+      containers:
+        - name: writer
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - |
+              while true; do
+                echo "$(date -Iseconds) $HOSTNAME" >> /data/$HOSTNAME.log
+                ls /data
+                sleep 5
+              done
+          volumeMounts:
+            - name: shared
+              mountPath: /data
+      volumes:
+        - name: shared
+          persistentVolumeClaim:
+            claimName: shared
