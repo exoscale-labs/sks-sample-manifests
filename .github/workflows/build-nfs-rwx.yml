@@ -5,9 +5,14 @@ on:
     branches:
       - main
     paths:
-      - 'nfs-rwx/image/**'
+      - 'nfs-rwx/**'
+      - '.github/workflows/build-nfs-rwx.yml'
     tags:
       - 'nfs-rwx-v*'
+  pull_request:
+    paths:
+      - 'nfs-rwx/**'
+      - '.github/workflows/build-nfs-rwx.yml'
   workflow_dispatch:
 
 env:
@@ -15,7 +20,58 @@ env:
   IMAGE_NAME: exoscale-labs/nfs-rwx
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Shellcheck
+        run: shellcheck -s sh nfs-rwx/image/*.sh nfs-rwx/image/tests/*.sh nfs-rwx/image/tests/kubectl nfs-rwx/hack/render.sh
+
+      - name: install.yaml matches values.yaml and node-fencer.yaml
+        run: |
+          nfs-rwx/hack/render.sh
+          git diff --exit-code nfs-rwx/install.yaml
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./nfs-rwx/image
+          file: ./nfs-rwx/image/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: nfs-rwx:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image contents
+        run: |
+          docker run --rm --entrypoint sh nfs-rwx:test -c '
+            set -e
+            kubectl version --client
+            jq --version
+            test "$(readlink /var/lib/nfs/ganesha)" = /export
+            # RecoverySkipIp needs Ganesha 11 or later.
+            major=$(ganesha.nfsd -v | sed -n "s/.*Release = V\([0-9]*\).*/\1/p")
+            echo "Ganesha major version: $major"
+            test "$major" -ge 11'
+
+      - name: Entrypoint tests
+        run: docker run --rm -v "$PWD/nfs-rwx/image/tests:/tests:ro" --entrypoint sh nfs-rwx:test /tests/test-entrypoint.sh
+
+      - name: Node fencer tests
+        run: docker run --rm -v "$PWD/nfs-rwx/image/tests:/tests:ro" --entrypoint sh nfs-rwx:test /tests/test-node-fencer.sh
+
   build:
+    needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -39,8 +39,16 @@ metadata:
   namespace: nfs
 spec:
   # Two copies on different nodes, so the node that dies cannot take the only
-  # copy with it. Both act on the same rules; tainting twice is harmless.
+  # copy with it. Both act on the same rules; tainting twice is harmless. On a
+  # single node cluster the second copy stays Pending, which is fine.
   replicas: 2
+  # Replace one copy at a time, removing the old one first: with one copy per
+  # node, a new copy can otherwise find no free node and the update hangs.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: node-fencer
@@ -52,16 +60,28 @@ spec:
       serviceAccountName: node-fencer
       affinity:
         podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                topologyKey: kubernetes.io/hostname
-                labelSelector:
-                  matchLabels:
-                    app: node-fencer
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: node-fencer
+      # A copy on a node that went away is replaced after 30 s instead of the
+      # default 5 minutes.
+      tolerations:
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 30
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 30
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: node-fencer
-          image: ghcr.io/exoscale-labs/nfs-rwx:0.1.0
+          image: ghcr.io/exoscale-labs/nfs-rwx:0.1.1
           command: ["/node-fencer.sh"]
           env:
             # Seconds a node must stay shut down before it is fenced.
@@ -74,6 +94,16 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
+          # The loop touches /tmp/heartbeat after every round. Restart the
+          # container if it stops doing that, for example on a hung API call.
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - '[ $(( $(date +%s) - $(stat -c %Y /tmp/heartbeat) )) -lt 180 ]'
+            initialDelaySeconds: 60
+            periodSeconds: 30
           resources:
             requests:
               cpu: 10m

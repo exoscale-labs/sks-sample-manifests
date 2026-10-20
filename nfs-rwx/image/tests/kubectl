@@ -1,0 +1,22 @@
+#!/bin/sh
+# Stand-in for kubectl in the node fencer tests. Serves nodes from $NODES_JSON
+# and records every change in $CALLS.
+#
+# Global flags are refused on purpose: in a pod, kubectl stops using its
+# in-cluster credentials when given flags like --request-timeout.
+case "$1" in
+    -*) echo "global kubectl flag $1 breaks in-cluster credentials" >&2; exit 2 ;;
+esac
+case "$1 $2" in
+    "get nodes")
+        [ "${FAIL_LIST:-}" = true ] && { echo "connection refused" >&2; exit 1; }
+        cat "$NODES_JSON" ;;
+    "get node")
+        jq --arg n "$3" '.items[] | select(.metadata.name == $n)' "$NODES_JSON" ;;
+    "taint node"|"annotate node")
+        echo "$*" >> "$CALLS"
+        [ "$1" = taint ] && [ "${FAIL_TAINT:-}" = true ] && exit 1
+        exit 0 ;;
+    *)
+        echo "unexpected kubectl call: $*" >&2; exit 2 ;;
+esac

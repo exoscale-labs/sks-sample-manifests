@@ -8,7 +8,7 @@
 # runs a Ganesha that breaks directory listings on current SKS nodes.
 image:
   repository: ghcr.io/exoscale-labs/nfs-rwx
-  tag: "0.1.0"
+  tag: "0.1.1"
 
 # All exported data lives on one Exoscale block storage volume. Size it for
 # everything the RWX volumes will hold together: per-volume sizes are not

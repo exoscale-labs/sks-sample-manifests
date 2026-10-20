@@ -4,7 +4,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: shared
+  name: rwx-smoke-test
 spec:
   accessModes: [ReadWriteMany]
   storageClassName: nfs
@@ -29,7 +29,8 @@ spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: DoNotSchedule
+          # Spread over nodes where possible, but still run on smaller clusters.
+          whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
               app: rwx-smoke-test
@@ -46,9 +47,9 @@ spec:
                 sleep 5
               done
           volumeMounts:
-            - name: shared
+            - name: data
               mountPath: /data
       volumes:
-        - name: shared
+        - name: data
           persistentVolumeClaim:
-            claimName: shared
+            claimName: rwx-smoke-test
