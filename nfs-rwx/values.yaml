@@ -1,14 +1,15 @@
 # Values for the nfs-server-provisioner Helm chart, version 1.8.0:
 # https://github.com/kubernetes-sigs/nfs-ganesha-server-and-external-provisioner
 #
-# helm install nfs nfs-ganesha/nfs-server-provisioner --version 1.8.0 \
-#   --namespace nfs --create-namespace -f values.yaml
+# helm install nfs nfs-server-provisioner \
+#   --repo https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/ \
+#   --version 1.8.0 --namespace nfs --create-namespace -f values.yaml
 
 # Our build of the server (see image/Dockerfile). The chart's default image
 # runs a Ganesha that breaks directory listings on current SKS nodes.
 image:
   repository: ghcr.io/exoscale-labs/nfs-rwx
-  tag: "0.1.1"
+  tag: "0.1.2"
 
 # All exported data lives on one Exoscale block storage volume. Size it for
 # everything the RWX volumes will hold together: per-volume sizes are not
@@ -27,6 +28,8 @@ storageClass:
   # The provisioner cannot resize the directories it hands out.
   allowVolumeExpansion: false
   reclaimPolicy: Delete
+  # rootSquash: "true" maps root on the clients to nobody (see README, Security).
+  parameters: {}
   mountOptions:
     # NFSv4.1 carries file locking in the protocol itself, which DuckDB and
     # SQLite rely on.

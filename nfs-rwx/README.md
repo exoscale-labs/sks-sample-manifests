@@ -8,7 +8,7 @@ Everything runs inside your cluster as ordinary pods. There is no extra VM to
 manage and nothing to install on the nodes.
 
 It is a **single NFS server, not a highly available one**: when its node is
-drained, restarted or fails, I/O on the volumes pauses for about 2 to 4
+drained, restarted or fails, I/O on the volumes pauses for about 2 to 5
 minutes and then continues by itself. Every pod in the cluster can reach the
 server, so use it only on clusters where you trust all workloads (see
 [Security](#security)).
@@ -24,7 +24,7 @@ the `exoscale-sbs` storage class exists. To create a new cluster with the
 add-on, pass `--exoscale-csi` to `exo compute sks create`.
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.1/nfs-rwx/install.yaml
+kubectl apply -f https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.2/nfs-rwx/install.yaml
 ```
 
 That creates the `nfs` namespace, the NFS server with a 100 GiB block volume,
@@ -33,7 +33,7 @@ share that one block volume. To start with a larger one, change the size at
 install time:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.1/nfs-rwx/install.yaml \
+curl -sL https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.2/nfs-rwx/install.yaml \
   | sed 's/storage: 100Gi/storage: 500Gi/' | kubectl apply -f -
 ```
 
@@ -77,9 +77,9 @@ Helm chart rendered with [`values.yaml`](values.yaml), plus
 helm install nfs nfs-server-provisioner \
   --repo https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/ \
   --version 1.8.0 --namespace nfs --create-namespace \
-  -f https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.1/nfs-rwx/values.yaml \
+  -f https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.2/nfs-rwx/values.yaml \
   --set persistence.size=100Gi
-kubectl apply -f https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.1/nfs-rwx/node-fencer.yaml
+kubectl apply -f https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.2/nfs-rwx/node-fencer.yaml
 ```
 
 </details>
@@ -91,7 +91,7 @@ claim and three pods, spread over the nodes, that each append to their own
 file and list the others:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.1/nfs-rwx/examples/rwx-smoke-test.yaml
+kubectl apply -f https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.2/nfs-rwx/examples/rwx-smoke-test.yaml
 kubectl rollout status deploy/rwx-smoke-test
 kubectl logs deploy/rwx-smoke-test --tail=5
 ```
@@ -110,7 +110,7 @@ nodes, kernel 7.0, `standard.medium`) in `ch-gva-2`, October 2026.
 | Normal operation | Shared reads and writes from every node, POSIX locks honored across nodes | ~150 MB/s sequential write from one pod |
 | NFS server pod restarts | I/O pauses, then continues. No errors, locks kept | ~100 s pause |
 | Node drain (upgrade, nodepool cycle) | As above, after the volume moves to another node | ~20 s move + ~100 s pause |
-| The node running the NFS server crashes | As above, after the [node fencer](#node-crash) moves the server | ~4 min pause, no action needed |
+| The node running the NFS server crashes | As above, after the [node fencer](#node-crash) moves the server | ~4 to 5 min pause, no action needed |
 | Growing the volume | The server stops while the disk is resized | ~30 s down + ~100 s pause |
 
 Most of the pause after every server start is the NFSv4 **grace period**
@@ -183,6 +183,9 @@ in the `nfs` namespace) applies the taint when all of the following hold:
 * The node is `NotReady`.
 * Both conditions have held for 60 seconds (`SHUTDOWN_FOR` in
   `node-fencer.yaml`).
+* The node's kubelet has not renewed its lease in that time. This catches a VM
+  that was started again but is not `Ready` yet: the cloud controller removes
+  its shutdown mark only once the node is `Ready`.
 
 Kubernetes then deletes the pods on that node, detaches their volumes and
 starts them elsewhere. When the node is `Ready` again, the fencer removes the
@@ -193,13 +196,14 @@ What we measured when the server's node was powered off:
 | After | Event |
 |---|---|
 | 50 s | Node `NotReady`, Exoscale reports the VM stopped |
-| 115 s | Fencer applies the taint |
-| 150 s | NFS server running on another node |
-| 250 s | Clients resume after the grace period; the DuckDB writer kept its lock |
+| 125 s | Fencer applies the taint |
+| 190 s | NFS server running on another node |
+| 285 s | Clients resume after the grace period; the DuckDB writer kept its lock |
 
 A node whose VM is still running, for example with a stopped kubelet or a
 network problem, is **not** fenced: the VM is not reported as stopped, so the
-fencer leaves it alone. We tested that too. If such a node hosts the NFS
+fencer leaves it alone. We tested that too. A node whose kubelet is alive is
+not fenced either, whatever the cloud controller says. If such a node hosts the NFS
 server and it really is broken, stop its VM (`exo compute instance stop`) and
 the fencer takes over.
 
@@ -244,7 +248,8 @@ the usual ~100 s pause.
    ```bash
    kubectl -n nfs scale statefulset nfs-nfs-server-provisioner --replicas=0
    PV=$(kubectl -n nfs get pvc data-nfs-nfs-server-provisioner-0 -o jsonpath='{.spec.volumeName}')
-   while kubectl get volumeattachments -o jsonpath='{.items[*].spec.source.persistentVolumeName}' | grep -q "$PV"; do sleep 5; done
+   [ -n "$PV" ] || echo "volume not found, check the claim name before going on"
+   while [ -n "$PV" ] && kubectl get volumeattachments -o jsonpath='{.items[*].spec.source.persistentVolumeName}' | grep -q "$PV"; do sleep 5; done
    ```
 
 3. Request the new size (volumes can only grow) and wait until the
@@ -291,7 +296,7 @@ kubectl -n nfs exec nfs-nfs-server-provisioner-0 -- df -h /export
 
 ```bash
 kubectl -n nfs logs nfs-nfs-server-provisioner-0
-kubectl -n nfs logs deploy/node-fencer
+kubectl -n nfs logs -l app=node-fencer --prefix   # both copies
 ```
 
 ## Security
@@ -304,10 +309,12 @@ The NFS server is shared by the whole cluster, and NFS trusts its clients:
   NetworkPolicy cannot narrow this down, because the legitimate traffic comes
   from the nodes themselves.
 * **Root is not squashed.** A client that claims to be root has root access to
-  the files. If your workloads do not need root on the volumes, add the
-  parameter `rootSquash: "true"` to the `nfs` storage class. Storage class
-  parameters cannot be edited, so delete and recreate the class; it applies
-  to volumes created afterwards.
+  the files. If your workloads do not need root on the volumes, set
+  `rootSquash: "true"` under `storageClass.parameters` in `values.yaml` and
+  install with Helm or a re-rendered `install.yaml` (`hack/render.sh`). On an
+  existing installation, delete the `nfs` storage class first: its parameters
+  cannot be changed in place. The setting applies to volumes created
+  afterwards.
 * **Traffic is not encrypted** between the nodes and the server.
 
 Use it on clusters whose workloads you trust. Keep data that other teams must
@@ -394,14 +401,14 @@ DuckDB can also read and write Parquet on Exoscale SOS directly.
    volume, **including all data on it**:
 
    ```bash
-   kubectl delete -f https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.1/nfs-rwx/install.yaml
+   kubectl delete -f https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.2/nfs-rwx/install.yaml
    ```
 
 With Helm, step 2 is:
 
 ```bash
 helm -n nfs uninstall nfs
-kubectl delete -f https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.1/nfs-rwx/node-fencer.yaml
+kubectl delete -f https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/nfs-rwx-v0.1.2/nfs-rwx/node-fencer.yaml
 kubectl -n nfs delete pvc data-nfs-nfs-server-provisioner-0   # Helm leaves the claim and its volume in place
 ```
 

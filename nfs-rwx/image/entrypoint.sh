@@ -47,19 +47,33 @@ RecoverySkipIp=true'
 
 fail() { echo "entrypoint: $*" >&2; exit 1; }
 
+# Inserts a line after the opening brace of the NFSV4 block, which is on a line
+# of its own after normalising.
+insert_into_nfsv4() {
+    awk -v line="$1" '
+        tolower($0) ~ /^[[:space:]]*nfsv4[[:space:]]*$/ { inblock = 1 }
+        { print }
+        inblock && /^[[:space:]]*\{[[:space:]]*$/ { print line; inblock = 0 }
+    ' "$CONFIG" > "$CONFIG.tmp"
+    mv "$CONFIG.tmp" "$CONFIG"
+}
+
 if [ ! -s "$CONFIG" ]; then
-    # Same as the provisioner's built-in default, plus our three settings.
+    # Same as the provisioner's built-in default, plus our three settings,
+    # with every brace on a line of its own.
     # Written to a temporary file first, so a crash cannot leave a partial
     # config that the next start would take as valid.
     cat > "$CONFIG.tmp" <<'CONF'
-EXPORT {
+EXPORT
+{
 	Export_Id = 0;
 	Path = /;
 	Pseudo = /;
 	Protocols = 4;
 	Access_Type = MDONLY_RO;
 	Filesystem_Id = 152.152;
-	FSAL {
+	FSAL
+	{
 		Name = PSEUDO;
 	}
 }
@@ -86,10 +100,18 @@ else
     # A config written by an earlier image or by hand. Changing how clients
     # are recorded drops the existing records once, so clients holding locks
     # during that one restart lose them.
-    sed -i 's/\r$//' "$CONFIG"
-    if ! grep -qi '^[[:space:]]*NFSV4\b' "$CONFIG"; then
-        # The provisioner replaces the Grace_Period line with its own value.
-        printf '\nNFSV4\n{\n\tGrace_Period = 90;\n}\n' >> "$CONFIG"
+    # Normalise: Unix line endings, and every brace on a line of its own (Ganesha
+    # does not care, but the inserts below need it). Comment lines are left as
+    # they are.
+    sed -i 's/\r$//; /^[[:space:]]*#/b; /^[[:space:]]*[{}][[:space:]]*$/b; s/{/\n{\n/g; s/}/\n}\n/g' "$CONFIG"
+    if ! grep -qi '^[[:space:]]*NFSV4[[:space:]]*$' "$CONFIG"; then
+        printf '\nNFSV4\n{\n}\n' >> "$CONFIG"
+    fi
+    # The provisioner sets the grace period by replacing this exact line; without
+    # it, it appends a second NFSV4 block.
+    if ! grep -q '^[[:space:]]*Grace_Period = [0-9]*;$' "$CONFIG"; then
+        sed -i '/^[[:space:]]*Grace_Period[[:space:]]*=/Id' "$CONFIG"
+        insert_into_nfsv4 "	Grace_Period = 90;"
     fi
     for setting in $SETTINGS; do
         key=${setting%%=*}
@@ -97,13 +119,7 @@ else
         if grep -qi "^[[:space:]]*${key}[[:space:]]*=" "$CONFIG"; then
             sed -i "s/^[[:space:]]*${key}[[:space:]]*=.*/\t$key = $value;/I" "$CONFIG"
         else
-            # Insert after the opening brace of the NFSV4 block.
-            awk -v line="	$key = $value;" '
-                /^[[:space:]]*NFSV4([^A-Za-z0-9_]|$)/ { inblock = 1 }
-                { print }
-                inblock && /\{/ { print line; inblock = 0 }
-            ' "$CONFIG" > "$CONFIG.tmp"
-            mv "$CONFIG.tmp" "$CONFIG"
+            insert_into_nfsv4 "	$key = $value;"
         fi
     done
 fi

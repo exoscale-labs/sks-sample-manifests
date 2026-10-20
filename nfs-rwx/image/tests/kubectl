@@ -1,21 +1,46 @@
 #!/bin/sh
-# Stand-in for kubectl in the node fencer tests. Serves nodes from $NODES_JSON
-# and records every change in $CALLS.
+# Stand-in for kubectl in the node fencer tests. Serves nodes from $NODES_JSON,
+# leases with a renewTime $LEASE_AGE seconds old (LEASE_AGE=missing: no lease),
+# and records every change in $CALLS. STATE is a scratch directory.
 #
 # Global flags are refused on purpose: in a pod, kubectl stops using its
 # in-cluster credentials when given flags like --request-timeout.
 case "$1" in
     -*) echo "global kubectl flag $1 breaks in-cluster credentials" >&2; exit 2 ;;
 esac
+
+# Nodes named in $STATE/tainted carry the out-of-service taint from then on,
+# like on a real API server. Works on a node list and on a single node.
+with_taint() {
+    jq --rawfile t "$STATE/tainted" '
+        def add: if (.metadata.name as $n | $t | split("\n") | index($n))
+                 then .spec.taints += [{"key":"node.kubernetes.io/out-of-service","value":"nodeshutdown","effect":"NoExecute"}]
+                 else . end;
+        if .items then .items |= map(add) else add end'
+}
+touch "$STATE/tainted"
+
 case "$1 $2" in
     "get nodes")
         [ "${FAIL_LIST:-}" = true ] && { echo "connection refused" >&2; exit 1; }
-        cat "$NODES_JSON" ;;
+        with_taint < "$NODES_JSON" ;;
     "get node")
-        jq --arg n "$3" '.items[] | select(.metadata.name == $n)' "$NODES_JSON" ;;
+        jq --arg n "$3" '.items[] | select(.metadata.name == $n)' "$NODES_JSON" | with_taint ;;
+    "get lease")
+        [ "${LEASE_AGE:-600}" = missing ] && { echo "leases \"$3\" not found" >&2; exit 1; }
+        jq -n --arg t "$(date -u -d "@$(( $(date +%s) - ${LEASE_AGE:-600} ))" +%Y-%m-%dT%H:%M:%S.123456Z)" \
+            '{spec: {renewTime: $t}}' ;;
     "taint node"|"annotate node")
         echo "$*" >> "$CALLS"
-        [ "$1" = taint ] && [ "${FAIL_TAINT:-}" = true ] && exit 1
+        case "$1 $4" in
+            "taint "*=nodeshutdown:NoExecute)
+                if [ "${FAIL_TAINT:-}" = true ]; then
+                    # TAINT_LANDS=true: the call times out after it was applied.
+                    [ "${TAINT_LANDS:-}" = true ] && echo "$3" >> "$STATE/tainted"
+                    exit 1
+                fi
+                echo "$3" >> "$STATE/tainted" ;;
+        esac
         exit 0 ;;
     *)
         echo "unexpected kubectl call: $*" >&2; exit 2 ;;

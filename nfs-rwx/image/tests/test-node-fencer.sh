@@ -6,7 +6,7 @@ set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 FENCER=${FENCER:-/node-fencer.sh}
 WORK=$(mktemp -d)
-export PATH="$HERE:$PATH" NODES_JSON="$WORK/nodes.json" CALLS="$WORK/calls"
+export PATH="$HERE:$PATH" NODES_JSON="$WORK/nodes.json" CALLS="$WORK/calls" STATE="$WORK/state"
 export HEARTBEAT="$WORK/heartbeat" INTERVAL=1 ROUNDS=1
 failed=0
 
@@ -31,7 +31,7 @@ nodes() { jq -s '{items: .}' > "$NODES_JSON"; }
 run() {
     name=$1 expected=$2; shift 2
     : > "$CALLS"
-    rm -f "$HEARTBEAT"
+    rm -rf "$HEARTBEAT" "$STATE"; mkdir -p "$STATE"
     status=0
     env "$@" sh "$FENCER" > "$WORK/out" 2>&1 || status=$?
     actual=$(cat "$CALLS")
@@ -44,9 +44,9 @@ run() {
     echo "$status" > "$WORK/status"
 }
 
-TAINT="taint node a node.kubernetes.io/out-of-service=nodeshutdown:NoExecute"
+TAINT="taint node a node.kubernetes.io/out-of-service=nodeshutdown:NoExecute --overwrite"
 MARK="annotate node a nfs-rwx.exoscale-labs.io/fenced=true --overwrite"
-UNTAINT="taint node a node.kubernetes.io/out-of-service-"
+UNTAINT="taint node a node.kubernetes.io/out-of-service:NoExecute-"
 UNMARK="annotate node a nfs-rwx.exoscale-labs.io/fenced-"
 
 { node a False shutdown; node b True; } | nodes
@@ -56,9 +56,21 @@ $TAINT" SHUTDOWN_FOR=0
 
 run "stopped VM, wait not elapsed: not fenced" "" SHUTDOWN_FOR=60
 
+run "stopped VM: fenced once the wait has passed over several rounds" "$MARK
+$TAINT" SHUTDOWN_FOR=2 INTERVAL=1 ROUNDS=4
+if [ "$(grep -c 'waiting 2s' "$WORK/out")" = 1 ]; then echo "ok   wait started once, not every round"; else echo "FAIL wait restarted"; sed 's/^/  log: /' "$WORK/out"; failed=1; fi
+
+run "kubelet still renews its lease: not fenced" "" SHUTDOWN_FOR=2 INTERVAL=1 ROUNDS=4 LEASE_AGE=0
+grep -q "kubelet still renews its lease" "$WORK/out" || { echo "FAIL lease refusal not logged"; failed=1; }
+
+run "lease cannot be read: not fenced" "" SHUTDOWN_FOR=0 LEASE_AGE=missing
+
 run "taint fails: mark rolled back" "$MARK
 $TAINT
 $UNMARK" SHUTDOWN_FOR=0 FAIL_TAINT=true
+
+run "taint call times out after it landed: mark kept" "$MARK
+$TAINT" SHUTDOWN_FOR=0 FAIL_TAINT=true TAINT_LANDS=true
 
 { node a False; } | nodes
 run "NotReady but VM running: not fenced" "" SHUTDOWN_FOR=0

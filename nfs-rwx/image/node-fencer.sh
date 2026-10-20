@@ -6,12 +6,18 @@
 # VM is off, the node.kubernetes.io/out-of-service taint tells Kubernetes so;
 # it then deletes the pods, detaches their volumes and reschedules them.
 #
-# This loop applies that taint for you, but only when the Exoscale cloud
-# controller manager has marked the node with
-# node.cloudprovider.kubernetes.io/shutdown (the Exoscale API reports the VM as
-# stopping or stopped), the node is NotReady, and both have been true for
-# SHUTDOWN_FOR seconds. A node that hangs while its VM still runs is never
-# touched. When the node is Ready again, the taint is removed.
+# This loop applies that taint for you, but only when all of these hold:
+#   - the Exoscale cloud controller manager has marked the node with
+#     node.cloudprovider.kubernetes.io/shutdown (the Exoscale API reported the
+#     VM as stopping or stopped),
+#   - the node is NotReady,
+#   - both have been true for SHUTDOWN_FOR seconds,
+#   - the node's kubelet has not renewed its lease for SHUTDOWN_FOR seconds.
+# The last check matters because the cloud controller removes the shutdown
+# taint only once the node is Ready again, not when the VM starts: a VM that
+# was started again but is not Ready yet still carries it. A live kubelet
+# renews its lease every 10 seconds. When the node is Ready again, the taint
+# is removed.
 #
 # The taint applies to the whole node, so every stateful pod on it is
 # rescheduled, not only the NFS server.
@@ -41,6 +47,9 @@ whole_number ROUNDS "$ROUNDS"
 
 SEEN=$(mktemp -d)   # one file per node: when we first saw it shut down
 
+# Exit cleanly when Kubernetes stops the pod, instead of showing it as failed.
+trap 'exit 0' TERM INT
+
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*"; }
 
 # A hung API call must not stall the loop forever. The timeout is enforced
@@ -60,11 +69,26 @@ NODE_FIELDS='[
 
 fields() { jq -r --arg s "$SHUTDOWN_TAINT" --arg o "$OOS_TAINT" --arg m "$MARK" "$1"; }
 
-# Re-reads one node right before acting on it, so a node that came back
-# between the listing and now is left alone.
+# Re-reads one node right before acting on it, so a node that came back, or
+# that the other copy of the fencer tainted, since the listing is left alone.
 still_shut_down() {
     k get node "$1" -o json | fields "$NODE_FIELDS" |
-        awk -F '\t' '$2 == "true" && $4 != "True" { found = 1 } END { exit !found }'
+        awk -F '\t' '$2 == "true" && $3 == "false" && $4 != "True" { found = 1 } END { exit !found }'
+}
+
+# Whether the taint is on the node now, for deciding what a failed call did.
+has_oos_taint() {
+    k get node "$1" -o json | fields "$NODE_FIELDS" |
+        awk -F '\t' '$3 == "true" { found = 1 } END { exit !found }'
+}
+
+# True only if the node's kubelet has not renewed its lease for SHUTDOWN_FOR
+# seconds. If the lease cannot be read, the node counts as alive.
+kubelet_silent() {
+    # shellcheck disable=SC2016 # jq program
+    renewed=$(k get lease "$1" -n kube-node-lease -o json |
+        jq -r '.spec.renewTime // empty | sub("\\.[0-9]+"; "") | fromdateiso8601') || return 1
+    [ -n "$renewed" ] && [ $(( $(date +%s) - renewed )) -ge "$SHUTDOWN_FOR" ]
 }
 
 # Counts rounds and stops after ROUNDS of them (tests only), then waits.
@@ -72,7 +96,10 @@ round=0
 next_round() {
     round=$((round + 1))
     [ "$ROUNDS" -eq 0 ] || [ "$round" -lt "$ROUNDS" ] || exit "$1"
-    sleep "$INTERVAL"
+    # In the background, so a stop signal is handled at once rather than
+    # after the sleep.
+    sleep "$INTERVAL" &
+    wait $!
 }
 
 log "watching nodes every ${INTERVAL}s, fencing after ${SHUTDOWN_FOR}s of shutdown"
@@ -97,11 +124,16 @@ while true; do
             esac
             since=$(( now - first ))
             if [ "$oos" = false ] && [ "$since" -ge "$SHUTDOWN_FOR" ] && still_shut_down "$node"; then
-                log "$node: shut down for ${since}s, applying $OOS_TAINT"
-                if k annotate node "$node" "$MARK=true" --overwrite >/dev/null; then
-                    if ! k taint node "$node" "$OOS_TAINT=nodeshutdown:NoExecute" >/dev/null; then
+                if ! kubelet_silent "$node"; then
+                    log "$node: kubelet still renews its lease, not fencing"
+                elif k annotate node "$node" "$MARK=true" --overwrite >/dev/null; then
+                    log "$node: shut down for ${since}s, applying $OOS_TAINT"
+                    # --overwrite: the other copy may have tainted it a moment ago.
+                    if ! k taint node "$node" "$OOS_TAINT=nodeshutdown:NoExecute" --overwrite >/dev/null; then
                         log "$node: tainting failed, retrying next round"
-                        k annotate node "$node" "$MARK-" >/dev/null || true
+                        # A timed-out call may still have tainted the node; keep the
+                        # mark then, or the taint would never be removed.
+                        has_oos_taint "$node" || k annotate node "$node" "$MARK-" >/dev/null || true
                     fi
                 else
                     log "$node: marking failed, retrying next round"
@@ -113,7 +145,7 @@ while true; do
 
         if [ "$mark" = true ] && [ "$ready" = True ]; then
             log "$node: Ready again, removing $OOS_TAINT"
-            if { [ "$oos" = false ] || k taint node "$node" "$OOS_TAINT-" >/dev/null; } &&
+            if { [ "$oos" = false ] || k taint node "$node" "$OOS_TAINT:NoExecute-" >/dev/null; } &&
                 k annotate node "$node" "$MARK-" >/dev/null; then
                 :
             else

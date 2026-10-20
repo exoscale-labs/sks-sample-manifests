@@ -18,6 +18,10 @@ rules:
   - apiGroups: [""]
     resources: [nodes]
     verbs: [get, list, patch]
+  # Node leases in kube-node-lease: is the kubelet still alive?
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -81,7 +85,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: node-fencer
-          image: ghcr.io/exoscale-labs/nfs-rwx:0.1.1
+          image: ghcr.io/exoscale-labs/nfs-rwx:0.1.2
           command: ["/node-fencer.sh"]
           env:
             # Seconds a node must stay shut down before it is fenced.
