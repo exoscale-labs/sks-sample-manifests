@@ -56,6 +56,7 @@ DBAAS_TYPES = {
     'opensearch': 'opensearch',
     'valkey': 'valkey',
     'grafana': 'grafana',
+    'thanos': 'thanos',
 }
 
 RETRY_STATUSES = (429, 500, 502, 503, 504)

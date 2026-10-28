@@ -14,7 +14,7 @@ data:
   sks-clusters: "my-cluster:ch-gva-2"
 
   # DBaaS services to update (format: "db-name:zone:type,db-name:zone:type")
-  # Supported types: pg, mysql, kafka, opensearch, valkey, grafana
+  # Supported types: pg, mysql, kafka, opensearch, valkey, grafana, thanos
   dbaas-services: "my-postgres-db:ch-gva-2:pg"
 
   # Optional: Static IPs to always include (CIDR format).

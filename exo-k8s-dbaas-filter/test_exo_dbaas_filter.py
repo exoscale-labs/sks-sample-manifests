@@ -5,6 +5,7 @@ are stubbed before the module under test is imported.
 """
 
 import importlib.util
+import json
 import logging
 import os
 import sys
@@ -449,6 +450,12 @@ class ConfigValidationTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             config_with(DBAAS_SERVICES=f"db-a:{ZONE}:oracle")
 
+    def test_thanos_service_parses(self):
+        config = config_with(DBAAS_SERVICES=f"metrics:{ZONE}:thanos")
+
+        self.assertEqual(config["dbaas_services"],
+                         [{"name": "metrics", "zone": ZONE, "type": "thanos"}])
+
     def test_malformed_static_ip_exits(self):
         """One bad CIDR makes every PUT fail with 400 and updates stop silently."""
         with self.assertRaises(SystemExit):
@@ -517,6 +524,67 @@ class ApiClientTest(unittest.TestCase):
             dbaas_filter.ExoscaleAPI._endpoint("de-fra-1"),
             "https://api-de-fra-1.exoscale.com/v2",
         )
+
+    def test_thanos_filter_is_read_and_written_on_its_own_path(self):
+        calls = []
+
+        class Response:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"ip-filter": ["192.0.2.1/32"]}
+
+        class RecordingSession:
+            def get(self, url, **kwargs):
+                calls.append(("GET", url, kwargs.get("json"),
+                              kwargs.get("timeout")))
+                return Response()
+
+            def put(self, url, **kwargs):
+                calls.append(("PUT", url, kwargs.get("json"),
+                              kwargs.get("timeout")))
+                return Response()
+
+        api = object.__new__(dbaas_filter.ExoscaleAPI)
+        api.auth, api.timeout, api.session = None, 7, RecordingSession()
+
+        current = api.get_dbaas_ip_filter("metrics", "thanos", "de-fra-1")
+        api.update_dbaas_ip_filter("metrics", "thanos", "de-fra-1",
+                                   ["192.0.2.2/32"])
+
+        url = "https://api-de-fra-1.exoscale.com/v2/dbaas-thanos/metrics"
+        self.assertEqual(current, ["192.0.2.1/32"])
+        self.assertEqual(calls, [
+            ("GET", url, None, 7),
+            ("PUT", url, {"ip-filter": ["192.0.2.2/32"]}, 7),
+        ])
+
+    def test_policy_allows_every_supported_type(self):
+        """A type missing from the policy only fails at runtime, with a 403.
+
+        Updates must sit in the rule restricted to ip_filter; in the get rule
+        they would allow any change to the service.
+        """
+        here = Path(__file__).resolve()
+        policy = json.loads(
+            here.with_name("dbaas-filter-policy.json").read_text())
+        get_rule, update_rule = (
+            rule["expression"]
+            for rule in policy["services"]["dbaas"]["rules"])
+        self.assertIn("parameters.has('ip_filter')", update_rule)
+        self.assertNotIn("'update-", get_rule)
+
+        # Operation names use the short type ('pg'), not the path ('postgres').
+        for short_type in dbaas_filter.DBAAS_TYPES:
+            self.assertIn(f"'get-dbaas-service-{short_type}'", get_rule)
+            self.assertIn(f"'update-dbaas-service-{short_type}'", update_rule)
+
+        readme = here.with_name("README.md").read_text()
+        embedded = readme.split(
+            "this policy (`dbaas-filter-policy.json`):\n\n```json\n", 1)[1]
+        self.assertEqual(json.loads(embedded.split("\n```", 1)[0]), policy,
+                         "README copy of the policy differs from the file")
 
     def test_session_is_configured_with_bounded_retries(self):
         """Constructed nowhere else in the suite; a bad kwarg would only surface

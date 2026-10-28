@@ -11,7 +11,7 @@ Automatically maintain DBaaS IP firewall rules by monitoring SKS cluster node IP
 
 **Features:**
 - Supports single or multiple SKS clusters
-- Supports single or multiple DBaaS services (PostgreSQL, MySQL, Kafka, OpenSearch, Valkey, Grafana)
+- Supports single or multiple DBaaS services (PostgreSQL, MySQL, Kafka, OpenSearch, Valkey, Grafana, Thanos)
 - Minimal IAM permissions required
 - Can run on: VM, local machine, or Kubernetes
 
@@ -133,6 +133,7 @@ Supported service types:
 - `opensearch` - OpenSearch
 - `valkey` - Valkey
 - `grafana` - Grafana
+- `thanos` - Thanos
 
 ### Configuration Examples
 
@@ -188,11 +189,11 @@ Create an IAM role with this policy (`dbaas-filter-policy.json`):
       "type": "rules",
       "rules": [
         {
-          "expression": "operation in ['get-dbaas-service-pg', 'get-dbaas-service-mysql', 'get-dbaas-service-kafka', 'get-dbaas-service-opensearch', 'get-dbaas-service-valkey', 'get-dbaas-service-grafana']",
+          "expression": "operation in ['get-dbaas-service-pg', 'get-dbaas-service-mysql', 'get-dbaas-service-kafka', 'get-dbaas-service-opensearch', 'get-dbaas-service-valkey', 'get-dbaas-service-grafana', 'get-dbaas-service-thanos']",
           "action": "allow"
         },
         {
-          "expression": "operation in ['update-dbaas-service-pg', 'update-dbaas-service-mysql', 'update-dbaas-service-kafka', 'update-dbaas-service-opensearch', 'update-dbaas-service-valkey', 'update-dbaas-service-grafana'] && parameters.has('ip_filter') && int(parameters.size()) == 2",
+          "expression": "operation in ['update-dbaas-service-pg', 'update-dbaas-service-mysql', 'update-dbaas-service-kafka', 'update-dbaas-service-opensearch', 'update-dbaas-service-valkey', 'update-dbaas-service-grafana', 'update-dbaas-service-thanos'] && parameters.has('ip_filter') && int(parameters.size()) == 2",
           "action": "allow"
         }
       ]
