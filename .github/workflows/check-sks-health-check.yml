@@ -1,0 +1,42 @@
+name: Check sks-health-check
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'sks-health-check/**'
+      - '.github/workflows/check-sks-health-check.yml'
+  pull_request:
+    paths:
+      - 'sks-health-check/**'
+      - '.github/workflows/check-sks-health-check.yml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    strategy:
+      matrix:
+        # macOS ships bash 3.2, which the script promises to support.
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Shellcheck
+        if: runner.os == 'Linux'
+        run: shellcheck sks-health-check/sks-health-check.sh
+
+      - name: Syntax, help and setup YAML with the system bash
+        run: |
+          /bin/bash --version | head -n 1
+          /bin/bash -n sks-health-check/sks-health-check.sh
+          /bin/bash sks-health-check/sks-health-check.sh --help > /dev/null
+          for flag in --print-setup --print-setup-group; do
+            /bin/bash sks-health-check/sks-health-check.sh "$flag" > setup.yaml
+            python3 -c 'import sys, yaml; docs = [d for d in yaml.safe_load_all(open("setup.yaml")) if d]; assert docs, "no YAML"; print(sys.argv[1], [d["kind"] for d in docs])' "$flag"
+          done
