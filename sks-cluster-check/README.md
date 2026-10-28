@@ -20,10 +20,10 @@ It needs only `bash`, `kubectl`, `awk`, `sed`, `sort`, `tar`, and common Unix to
 `jq`. It takes about a minute on a small cluster. It makes about 60 read calls (about 70 with Longhorn,
 up to 20 more with `--with-logs`), each with a 60-second timeout.
 
-1. Download the script, pinned to a release:
+1. Download the script:
 
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/sks-health-check-v2.0/sks-health-check/sks-health-check.sh
+   curl -fsSLO https://raw.githubusercontent.com/exoscale-labs/sks-sample-manifests/main/sks-cluster-check/sks-health-check.sh
    chmod +x sks-health-check.sh
    ```
 

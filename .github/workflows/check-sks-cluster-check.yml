@@ -1,16 +1,16 @@
-name: Check sks-health-check
+name: Check sks-cluster-check
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'sks-health-check/**'
-      - '.github/workflows/check-sks-health-check.yml'
+      - 'sks-cluster-check/**'
+      - '.github/workflows/check-sks-cluster-check.yml'
   pull_request:
     paths:
-      - 'sks-health-check/**'
-      - '.github/workflows/check-sks-health-check.yml'
+      - 'sks-cluster-check/**'
+      - '.github/workflows/check-sks-cluster-check.yml'
   workflow_dispatch:
 
 jobs:
@@ -30,14 +30,14 @@ jobs:
 
       - name: Shellcheck
         if: runner.os == 'Linux'
-        run: shellcheck sks-health-check/sks-health-check.sh
+        run: shellcheck sks-cluster-check/sks-health-check.sh
 
       - name: Syntax, help and setup YAML with the system bash
         run: |
           /bin/bash --version | head -n 1
-          /bin/bash -n sks-health-check/sks-health-check.sh
-          /bin/bash sks-health-check/sks-health-check.sh --help > /dev/null
+          /bin/bash -n sks-cluster-check/sks-health-check.sh
+          /bin/bash sks-cluster-check/sks-health-check.sh --help > /dev/null
           for flag in --print-setup --print-setup-group; do
-            /bin/bash sks-health-check/sks-health-check.sh "$flag" > setup.yaml
+            /bin/bash sks-cluster-check/sks-health-check.sh "$flag" > setup.yaml
             ruby -ryaml -e 'docs = YAML.load_stream(File.read("setup.yaml")).compact; abort "no YAML" if docs.empty?; puts "#{ARGV[0]}: #{docs.map { |d| d["kind"] }.join(", ")}"' -- "$flag"
           done
