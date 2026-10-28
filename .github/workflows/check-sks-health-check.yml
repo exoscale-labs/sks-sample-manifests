@@ -16,6 +16,7 @@ on:
 jobs:
   check:
     strategy:
+      fail-fast: false
       matrix:
         # macOS ships bash 3.2, which the script promises to support.
         os: [ubuntu-latest, macos-latest]
@@ -38,5 +39,5 @@ jobs:
           /bin/bash sks-health-check/sks-health-check.sh --help > /dev/null
           for flag in --print-setup --print-setup-group; do
             /bin/bash sks-health-check/sks-health-check.sh "$flag" > setup.yaml
-            python3 -c 'import sys, yaml; docs = [d for d in yaml.safe_load_all(open("setup.yaml")) if d]; assert docs, "no YAML"; print(sys.argv[1], [d["kind"] for d in docs])' "$flag"
+            ruby -ryaml -e 'docs = YAML.load_stream(File.read("setup.yaml")).compact; abort "no YAML" if docs.empty?; puts "#{ARGV[0]}: #{docs.map { |d| d["kind"] }.join(", ")}"' "$flag"
           done
