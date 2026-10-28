@@ -39,5 +39,5 @@ jobs:
           /bin/bash sks-health-check/sks-health-check.sh --help > /dev/null
           for flag in --print-setup --print-setup-group; do
             /bin/bash sks-health-check/sks-health-check.sh "$flag" > setup.yaml
-            ruby -ryaml -e 'docs = YAML.load_stream(File.read("setup.yaml")).compact; abort "no YAML" if docs.empty?; puts "#{ARGV[0]}: #{docs.map { |d| d["kind"] }.join(", ")}"' "$flag"
+            ruby -ryaml -e 'docs = YAML.load_stream(File.read("setup.yaml")).compact; abort "no YAML" if docs.empty?; puts "#{ARGV[0]}: #{docs.map { |d| d["kind"] }.join(", ")}"' -- "$flag"
           done
